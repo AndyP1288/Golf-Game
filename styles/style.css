@@ -1,0 +1,132 @@
+/* ==== Global Styles ==== */
+body {
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(180deg, #f3f7ff, #d4e6ff);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  color: #1e2a38;
+  line-height: 1.5; /* Improves readability */
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+button {
+  border: none;
+  background: #1e88e5;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background: #1565c0;
+  transform: scale(1.05);
+}
+
+/* ==== Main Menu ==== */
+.menu-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  min-height: 100vh; /* changed from height:100vh */
+  padding-top: 60px;
+  overflow-y: auto; /* allows vertical scroll */
+  scroll-behavior: smooth;
+}
+
+.menu-screen.hidden {
+  display: none !important;
+}
+
+.game-title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #0a3d62;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  color: #555;
+  margin-bottom: 30px;
+}
+
+.worlds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  width: 90%;
+  max-width: 1200px;
+  padding-bottom: 20px;
+}
+
+/* ==== Scrollable for small screens ==== */
+@media (max-width: 600px) {
+  .worlds-grid {
+    display: flex;
+    overflow-x: auto; /* horizontal scroll for cards */
+    padding: 10px 0;
+  }
+
+  .worlds-grid::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .worlds-grid::-webkit-scrollbar-thumb {
+    background: #1e88e5;
+    border-radius: 4px;
+  }
+
+  .world-card {
+    min-width: 220px;
+    flex: 0 0 auto;
+  }
+}
+
+/* ==== World Cards ==== */
+.world-card {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  transition: 0.3s ease;
+  cursor: pointer;
+}
+
+.world-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.world-card img {
+  width: 100%;
+  border-radius: 12px;
+}
+
+.world-card h2 {
+  margin-top: 12px;
+  color: #1e88e5;
+}
+
+.world-card p {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+/* ==== Game Area ==== */
+#game-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}

@@ -1,0 +1,1206 @@
+/* =========================================================================
+   Golf Worlds - scripts/app.js
+   Contains five playable 2D worlds (all canvas-based):
+     1) Pro Golfer World - realistic timing/angle/power + follow-through + par/strokes
+     2) Greenskeeper World - timed "water patches" drying mechanic & repair tasks
+     3) Course Designer World - paintbrush tool to paint sand, water, grass, green
+     4) Caddy / Carrying World - move golf bags between points with physics & stamina
+     5) Club Manager World - manage event logistics, schedule, budget mini-game
+   Features:
+     - Main menu with clickable world thumbnails
+     - Back-to-menu and Play-again UI
+     - Polished visuals with transitions & easing
+     - Clear comments and modular structure for future extension
+   Notes:
+     - This is pure JS/Canvas (no external libs), runs offline
+     - Tune constants (gravity, friction) near top of each world
+   ========================================================================= */
+
+/* ============================
+   Utility / Polyfills & Setup
+   ============================ */
+
+(() => {
+  'use strict';
+
+  // Create root element if not already present
+  const existingRoot = document.getElementById('app-root');
+  const root = existingRoot || (function () {
+    const r = document.createElement('div');
+    r.id = 'app-root';
+    document.body.appendChild(r);
+    return r;
+  })();
+
+  // Basic stylesheet injection for overlay UI
+  const style = document.createElement('style');
+  style.textContent = `
+    :root{--bg:#e7f4f2;--panel:#ffffffcc;--accent:#00695c;--muted:#6b6b6b}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    #app-root{position:fixed;left:0;top:0;right:0;bottom:0;background:linear-gradient(180deg,var(--bg),#d2f0ea);display:flex;align-items:center;justify-content:center}
+    .panel{background:var(--panel);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:18px;max-width:1200px;width:95%;max-height:90vh;overflow:hidden;display:flex;flex-direction:row;gap:16px}
+    .menu-col{width:340px;display:flex;flex-direction:column;gap:12px}
+    .title{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+    .subtitle{font-size:13px;color:var(--muted);margin-bottom:8px}
+    .world-tile{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,.04);transition:transform .12s ease, box-shadow .12s ease}
+    .world-tile:hover{transform:translateY(-4px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
+    .world-thumb{width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333}
+    .world-info{flex:1}
+    .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+    .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+    .hud{position:absolute;left:20px;top:20px;background:#ffffffaa;padding:8px 10px;border-radius:8px;backdrop-filter:blur(4px)}
+    .bottom-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#00000011;padding:8px 12px;border-radius:999px}
+    .small{font-size:12px;color:#222}
+    .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
+    .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+    .overlay-win{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.5));color:white;font-size:20px;flex-direction:column;gap:12px}
+    .input{padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.08)}
+    .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.06)}
+    .muted{color:#666;font-size:12px}
+  `;
+  document.head.appendChild(style);
+
+  /* =========================
+     Global Canvas & Systems
+     ========================= */
+
+  // Create canvas area inside panel
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+
+  // Left column: menu / world list
+  const left = document.createElement('div');
+  left.className = 'menu-col';
+
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = 'Golf Worlds — Careers on the Green';
+
+  const subtitle = document.createElement('div');
+  subtitle.className = 'subtitle';
+  subtitle.textContent = 'Jump into immersive mini-worlds that demonstrate 5 different golf careers. Play and learn.';
+
+  left.appendChild(title);
+  left.appendChild(subtitle);
+
+  // world definitions (id, name, summary, color)
+  const worlds = [
+    { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6' },
+    { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3' },
+    { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff' },
+    { id: 'caddy', name: 'Caddy (Carrying)', summary: 'Carry gear, manage stamina, accurately place the bag and clubs under constraints.', color: '#ffd6da' },
+    { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff' }
+  ];
+
+  // Tile factory
+  const tiles = {};
+  worlds.forEach(w => {
+    const tile = document.createElement('div');
+    tile.className = 'world-tile';
+    tile.dataset.world = w.id;
+    tile.innerHTML = `<div class="world-thumb" style="background:linear-gradient(90deg,${w.color},#fff)">${w.name.split(' ').map(s => s[0]).join('')}</div>
+                      <div class="world-info">
+                        <div style="font-weight:600">${w.name}</div>
+                        <div class="muted">${w.summary}</div>
+                      </div>
+                      <div><button class="play-btn">Play</button></div>`;
+    left.appendChild(tile);
+    tiles[w.id] = tile;
+  });
+
+  // Right column: canvas + HUD
+  const right = document.createElement('div');
+  right.className = 'canvas-wrap';
+
+  // Canvas setup
+  const canvas = document.createElement('canvas');
+  canvas.id = 'gw-canvas';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  canvas.tabIndex = 0; // to capture keys
+  right.appendChild(canvas);
+
+  // HUD (top-left)
+  const hud = document.createElement('div');
+  hud.className = 'hud small';
+  hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
+  right.appendChild(hud);
+
+  // bottom bar
+  const bottom = document.createElement('div');
+  bottom.className = 'bottom-bar small';
+  bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
+  right.appendChild(bottom);
+
+  panel.appendChild(left);
+  panel.appendChild(right);
+  root.appendChild(panel);
+
+  // Responsive canvas sizing logic
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas() {
+    // physical size equals container size for crisp drawing
+    const rect = right.getBoundingClientRect();
+    canvas.width = Math.max(800, Math.floor(rect.width));
+    canvas.height = Math.max(480, Math.floor(rect.height));
+  }
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    if (currentWorld && currentWorld.onResize) currentWorld.onResize();
+  });
+
+  resizeCanvas();
+
+  // Global game state
+  let currentWorld = null;
+  let animationFrameId = null;
+  let mouse = { x: 0, y: 0, down: false };
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    if (currentWorld && currentWorld.onMouseMove) currentWorld.onMouseMove(mouse);
+  });
+  canvas.addEventListener('mousedown', e => { mouse.down = true; if (currentWorld && currentWorld.onMouseDown) currentWorld.onMouseDown(mouse); });
+  canvas.addEventListener('mouseup', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseUp) currentWorld.onMouseUp(mouse); });
+  canvas.addEventListener('mouseleave', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseLeave) currentWorld.onMouseLeave(mouse); });
+
+  // Keyboard handling (space, arrows)
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.code] = true; if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(e.code); });
+  window.addEventListener('keyup', e => { keys[e.code] = false; if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(e.code); });
+
+  // Small UI functions
+  const hudWorld = document.getElementById('hud-world');
+  const hudSub = document.getElementById('hud-sub');
+  const btnBack = document.getElementById('btn-back');
+  const statusPill = document.getElementById('status-pill');
+
+  btnBack.addEventListener('click', () => {
+    stopCurrentWorld();
+    showMenu();
+  });
+
+  // Menu handlers
+  function showMenu() {
+    // highlight none
+    Object.values(tiles).forEach(t => t.style.opacity = '1');
+    hudWorld.textContent = 'Select a world';
+    hudSub.textContent = 'Click a tile to begin.';
+    statusPill.textContent = 'Idle';
+    // stop any world
+    stopCurrentWorld();
+  }
+
+  Object.values(tiles).forEach(tile => {
+    tile.addEventListener('click', () => {
+      const w = tile.dataset.world;
+      startWorld(w);
+    });
+    const btn = tile.querySelector('button.play-btn');
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const w = tile.dataset.world;
+      startWorld(w);
+    });
+  });
+
+  // Stopping current world (cleanup)
+  function stopCurrentWorld() {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+    if (currentWorld && currentWorld.onStop) currentWorld.onStop();
+    currentWorld = null;
+    // clear canvas
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+
+  /* ===========================
+     Shared drawing utilities
+     =========================== */
+  function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  /* ===========================
+     World: Pro Golfer (realistic 2D)
+     =========================== */
+  function createProGolferWorld() {
+    // Configuration
+    const groundH = Math.floor(canvas.height * 0.20);
+    const teeX = Math.floor(canvas.width * 0.12);
+    const holeX = Math.floor(canvas.width * 0.82);
+    const holeY = canvas.height - groundH - 6;
+    const ballRadius = 8;
+    const gravity = 0.45; // pixels/frame^2
+    const friction = 0.995;
+    const wind = () => (Math.random() * 2 - 1) * 0.1; // small random drift applied per frame
+
+    let par = 3;
+    let strokes = 0;
+    let ball = null; // {x,y,vx,vy,onGround}
+    let charging = false;
+    let power = 0; // 0..100
+    let angle = Math.PI / 4; // radians
+    let lastShotTime = 0;
+    let windStrength = (Math.random() * 1.2 - .6);
+    let showWinOverlay = false;
+    let overlayText = '';
+
+    // Reset ball to tee
+    function resetBall() {
+      ball = { x: teeX, y: canvas.height - groundH - ballRadius, vx: 0, vy: 0, onGround: true };
+      strokes = 0;
+      charging = false;
+      power = 0;
+      showWinOverlay = false;
+      overlayText = '';
+      statusPill.textContent = `Par ${par} — Strokes ${strokes}/${par}`;
+    }
+
+    resetBall();
+
+    // Physics update
+    function physicsStep() {
+      // Gravity & movement
+      if (!ball.onGround) {
+        ball.vy += gravity;
+        ball.vx *= friction;
+        ball.vx += windStrength * 0.01; // gentle continuous wind effect
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // ground collision (simple)
+        const groundY = canvas.height - groundH - ballRadius;
+        if (ball.y >= groundY) {
+          ball.y = groundY;
+          ball.onGround = true;
+          // bounce negligible
+          if (Math.abs(ball.vy) > 1.5) {
+            ball.vy *= -0.2;
+            ball.vx *= 0.8;
+            ball.onGround = false; // small bounce
+          } else {
+            ball.vy = 0;
+            ball.vx *= 0.9;
+          }
+        }
+        // off-screen resets
+        if (ball.x < -50 || ball.x > canvas.width + 50 || ball.y > canvas.height + 200) {
+          // automatic reset to tee (counts as an extra stroke)
+          overlayText = 'Ball out of bounds — Reset to tee';
+          showWinOverlay = true;
+          setTimeout(() => { resetBall(); }, 900);
+        }
+      }
+    }
+
+    // Check for hole-in
+    function checkHoleIn() {
+      const dx = ball.x - holeX;
+      const dy = ball.y - holeY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      // need slow enough speed to fall in
+      const speed = Math.sqrt(ball.vx*ball.vx + ball.vy*ball.vy);
+      const thresholdSpeed = 1.6; // if slower than this, it will go in
+      if (dist < ballRadius + 10) {
+        if (speed <= thresholdSpeed) {
+          // win
+          overlayText = `Hole in ${strokes} stroke${strokes===1?'':'s'}!`;
+          showWinOverlay = true;
+          statusPill.textContent = 'Hole!';
+        } else {
+          // ball goes over the hole — add a little bounce forward, no hole
+          ball.vx += (dx / (dist||1)) * 0.8;
+          ball.vy -= 0.8;
+        }
+      }
+    }
+
+    // Draw function
+    function drawScene() {
+      // sky
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+      skyGrad.addColorStop(0, '#bfefff');
+      skyGrad.addColorStop(1, '#8ed09b');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // distant hills
+      ctx.fillStyle = '#6dbb7b';
+      ctx.beginPath();
+      ctx.ellipse(canvas.width * 0.3, canvas.height * 0.55, canvas.width * 0.4, canvas.height * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#4a9b66';
+      ctx.beginPath();
+      ctx.ellipse(canvas.width * 0.85, canvas.height * 0.6, canvas.width * 0.3, canvas.height * 0.14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ground
+      ctx.fillStyle = '#1e7b4a';
+      ctx.fillRect(0, canvas.height - groundH, canvas.width, groundH);
+
+      // tee area
+      ctx.fillStyle = '#0c5c38';
+      ctx.fillRect(teeX - 20, canvas.height - groundH - 6, 44, 10);
+
+      // flag & hole
+      // hole circle
+      ctx.beginPath();
+      ctx.fillStyle = 'black';
+      ctx.arc(holeX, holeY, 10, 0, Math.PI*2);
+      ctx.fill();
+      // flagstick
+      ctx.fillStyle = '#333';
+      ctx.fillRect(holeX - 2, holeY - 60, 4, 60);
+      // flag
+      ctx.fillStyle = '#f44336';
+      ctx.beginPath();
+      ctx.moveTo(holeX + 2, holeY - 60);
+      ctx.lineTo(holeX + 28, holeY - 48);
+      ctx.lineTo(holeX + 2, holeY - 36);
+      ctx.closePath();
+      ctx.fill();
+
+      // ball
+      ctx.beginPath();
+      ctx.fillStyle = '#fff';
+      ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ddd';
+      ctx.stroke();
+
+      // swing UI: power arc and angle indicator
+      // draw shot guide from ball
+      if (ball.onGround) {
+        // draw angle arrow
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+        ctx.lineWidth = 2;
+        const len = 60 + (power * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(ball.x, ball.y - 2);
+        ctx.lineTo(ball.x + Math.cos(angle) * len, ball.y - Math.sin(angle) * len);
+        ctx.stroke();
+
+        // power bar (overlay)
+        const barWidth = 220;
+        const barX = canvas.width / 2 - barWidth/2;
+        const barY = canvas.height - 44;
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        drawRoundedRect(ctx, barX, barY, barWidth, 12, 6);
+        ctx.fillStyle = '#00c853';
+        const pw = clamp(power/100, 0, 1) * (barWidth - 2);
+        drawRoundedRect(ctx, barX+1, barY+1, pw, 10, 6);
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Inter';
+        ctx.fillText(`Power: ${Math.round(power)}%`, barX + barWidth + 10, barY + 10);
+      }
+
+      // heads-up: par/strokes/wind
+      ctx.font = '14px Inter';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`Par ${par} • Strokes ${strokes}/${par}`, 18, 26);
+      ctx.fillText(`Wind: ${windStrength.toFixed(2)}`, 18, 46);
+    }
+
+    // Input handling
+    function onKeyDown(code) {
+      if (code === 'Space' && ball.onGround && !charging) {
+        charging = true;
+        power = 0;
+      }
+      if (code === 'ArrowUp') angle = clamp(angle + 0.04, 0.12, Math.PI*0.75);
+      if (code === 'ArrowDown') angle = clamp(angle - 0.04, 0.12, Math.PI*0.75);
+    }
+    function onKeyUp(code) {
+      if (code === 'Space' && charging && ball.onGround) {
+        charging = false;
+        // take shot
+        const shotPower = clamp(power, 2, 100);
+        const speed = shotPower / 3.5; // translate to velocity
+        ball.vx = Math.cos(angle) * speed;
+        ball.vy = -Math.sin(angle) * speed;
+        ball.onGround = false;
+        strokes += 1;
+        lastShotTime = performance.now();
+        statusPill.textContent = `Strokes ${strokes}/${par}`;
+        // check if exceeded par
+        if (strokes > par) {
+          overlayText = 'Par exceeded. Resetting...';
+          showWinOverlay = true;
+          setTimeout(() => resetBall(), 1000);
+        }
+      }
+    }
+
+    // Mouse controls (click to aim or drag)
+    function onMouseMove(m) {
+      if (ball.onGround && !charging) {
+        // aim with mouse: set angle toward mouse
+        const dx = m.x - ball.x;
+        const dy = ball.y - m.y;
+        angle = Math.atan2(dy, dx);
+        angle = clamp(angle, 0.12, Math.PI*0.75);
+      }
+      // while charging, optionally adjust angle slightly
+    }
+    function onMouseDown(m) {
+      // start charging if on ball
+      const dx = m.x - ball.x;
+      const dy = m.y - ball.y;
+      if (Math.sqrt(dx*dx + dy*dy) < 40 && ball.onGround) {
+        charging = true; power = 0;
+      }
+    }
+    function onMouseUp(m) {
+      if (charging && ball.onGround) {
+        charging = false;
+        const shotPower = clamp(power, 2, 100);
+        const speed = shotPower / 3.5;
+        ball.vx = Math.cos(angle) * speed;
+        ball.vy = -Math.sin(angle) * speed;
+        ball.onGround = false;
+        strokes += 1;
+        statusPill.textContent = `Strokes ${strokes}/${par}`;
+        if (strokes > par) {
+          overlayText = 'Par exceeded. Resetting...';
+          showWinOverlay = true;
+          setTimeout(() => resetBall(), 1000);
+        }
+      }
+    }
+
+    function onResize() {
+      // reposition tee/hole maybe recompute constants if canvas size changed (not required now)
+    }
+
+    function onStart() {
+      // set hud
+      hudWorld.textContent = 'Pro Golfer';
+      hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
+      statusPill.textContent = `Par ${par} • Strokes ${strokes}/${par}`;
+      windStrength = (Math.random() * 1.6 - 0.8);
+    }
+
+    function onStop() {
+      // nothing special
+    }
+
+    // Render/Update loop
+    function loop() {
+      if (!currentWorld || currentWorld.id !== 'pro') return;
+      // charging power growth
+      if (charging && ball.onGround) {
+        power += 1.6; // charging speed
+        if (power > 100) power = 100;
+      }
+
+      physicsStep();
+
+      // check hole collision only when ball is near ground
+      if (ball) checkHoleIn();
+
+      drawScene();
+
+      // overlay
+      if (showWinOverlay) {
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 28px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(overlayText, canvas.width/2, canvas.height/2 - 20);
+
+        // buttons: Play again & Back to menu
+        ctx.font = '16px Inter';
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(canvas.width/2 - 80, canvas.height/2 + 8, 160, 40);
+        ctx.fillStyle = '#003b2e';
+        ctx.fillText('Play Again', canvas.width/2, canvas.height/2 + 36);
+      }
+
+      animationFrameId = requestAnimationFrame(loop);
+    }
+
+    // Expose world API
+    return {
+      id: 'pro',
+      onStart,
+      onStop,
+      onKeyDown,
+      onKeyUp,
+      onMouseMove,
+      onMouseDown,
+      onMouseUp,
+      onResize,
+      loop
+    };
+  }
+
+  /* ===========================
+     World: Course Designer (paint + place hazards)
+     =========================== */
+  function createDesignerWorld() {
+    // Track layers: 0 = grass, 1 = sand, 2 = water, 3 = green
+    // Implementation: simple grid painting to keep it deterministic & fast
+    const cols = 80;
+    const rows = Math.round((canvas.height / canvas.width) * cols);
+    const cellW = canvas.width / cols;
+    const cellH = canvas.height / rows;
+    const grid = new Array(rows).fill(null).map(()=>new Array(cols).fill(0)); // default grass
+    let brush = 'sand'; // sand, water, green, grass, tee, hole
+    let strokeCount = 0;
+    let placingHole = false;
+    let holeCell = null;
+    let hoverCell = null;
+
+    function onStart() {
+      hudWorld.textContent = 'Course Designer';
+      hudSub.textContent = 'Use mouse drag to paint. Click toolbar to change brush. Place a hole and tee to test play.';
+      statusPill.textContent = 'Designer mode';
+      // initialize grid to 'grass'
+      for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) grid[r][c]=0;
+      strokeCount = 0;
+      holeCell = null;
+    }
+
+    function worldToCell(mx,my) {
+      const c = clamp(Math.floor(mx / cellW), 0, cols-1);
+      const r = clamp(Math.floor(my / cellH), 0, rows-1);
+      return { r, c };
+    }
+
+    function paintAt(mx,my) {
+      const {r,c} = worldToCell(mx,my);
+      if (placingHole) {
+        holeCell = { r, c };
+        placingHole = false;
+        return;
+      }
+      const map = { grass:0, sand:1, water:2, green:3, tee:4 };
+      if (grid[r][c] !== map[brush]) {
+        grid[r][c] = map[brush] || 0;
+        strokeCount++;
+      }
+    }
+
+    function draw() {
+      // background
+      ctx.fillStyle = '#a7d39a';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      // draw grid cells
+      for (let r=0;r<rows;r++) {
+        for (let c=0;c<cols;c++) {
+          const x = c*cellW, y = r*cellH;
+          switch(grid[r][c]) {
+            case 0: ctx.fillStyle = '#2fa14a'; break; // grass
+            case 1: ctx.fillStyle = '#e6d4a6'; break; // sand
+            case 2: ctx.fillStyle = '#8fbbe6'; break; // water
+            case 3: ctx.fillStyle = '#76d27e'; break; // green
+            case 4: ctx.fillStyle = '#6aa84f'; break; // tee variant
+            default: ctx.fillStyle = '#2fa14a';
+          }
+          ctx.fillRect(x,y,cellW,cellH);
+        }
+      }
+
+      // hole
+      if (holeCell) {
+        const cx = holeCell.c*cellW + cellW/2;
+        const cy = holeCell.r*cellH + cellH/2;
+        ctx.beginPath();
+        ctx.fillStyle = 'black';
+        ctx.arc(cx,cy,Math.min(cellW,cellH)*0.36,0,Math.PI*2);
+        ctx.fill();
+      }
+
+      // draw grid lines subtle
+      ctx.strokeStyle = 'rgba(0,0,0,0.03)';
+      ctx.lineWidth = 1;
+      for (let r=0;r<=rows;r++){ ctx.beginPath(); ctx.moveTo(0,r*cellH); ctx.lineTo(canvas.width,r*cellH); ctx.stroke(); }
+      for (let c=0;c<=cols;c++){ ctx.beginPath(); ctx.moveTo(c*cellW,0); ctx.lineTo(c*cellW,canvas.height); ctx.stroke(); }
+
+      // HUD overlay for brush
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      drawRoundedRect(ctx, 10, 10, 220, 40, 8);
+      ctx.fillStyle = '#111';
+      ctx.font = '14px Inter';
+      ctx.fillText('Brush: '+brush, 26, 36);
+      // instructions
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px Inter';
+      ctx.fillText('Tip: paint green around the hole for good putting. Use water for hazards.', 260, 30);
+    }
+
+    function onMouseMove(m) {
+      hoverCell = worldToCell(m.x, m.y);
+      if (mouse.down) paintAt(m.x, m.y);
+    }
+    function onMouseDown(m) {
+      paintAt(m.x, m.y);
+    }
+    function onMouseUp(m) {}
+    function onKeyDown(code) {
+      if (code === 'Digit1') brush = 'grass';
+      if (code === 'Digit2') brush = 'sand';
+      if (code === 'Digit3') brush = 'water';
+      if (code === 'Digit4') brush = 'green';
+      if (code === 'Digit5') brush = 'tee';
+      if (code === 'KeyH') { placingHole = true; hudSub.textContent = 'Click to place the hole.'; }
+      if (code === 'KeyT') { /* place tee manually */ hudSub.textContent = 'Tee placement not implemented (auto).'; }
+    }
+    function onKeyUp(code) {}
+    function onResize() {}
+
+    // simulate test-play basic pathfinding for difficulty scoring (not full physics)
+    function quickTestPlay() {
+      // sample check: find if there is a continuous sand or water in the center path
+      let sandCount = 0, waterCount = 0, greenCount = 0;
+      const midRow = Math.floor(rows/2);
+      for (let c=0;c<cols;c++) {
+        const cell = grid[midRow][c];
+        if (cell===1) sandCount++;
+        if (cell===2) waterCount++;
+        if (cell===3) greenCount++;
+      }
+      const difficulty = 1 + Math.floor((sandCount*0.6 + waterCount*1.2 - greenCount*0.3)/10);
+      hudSub.textContent = `Quick test: mid-line sand ${sandCount}, water ${waterCount}. Est. difficulty ${difficulty}`;
+    }
+
+    function onStart() {
+      onStart();
+    }
+
+    function loop() {
+      if (!currentWorld || currentWorld.id !== 'designer') return;
+      draw();
+      // floating overlay for placing hole
+      if (placingHole) {
+        ctx.fillStyle = 'rgba(255,0,0,0.28)';
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, Math.min(cellW,cellH)*0.8,0,Math.PI*2);
+        ctx.fill();
+      }
+      animationFrameId = requestAnimationFrame(loop);
+    }
+
+    return {
+      id: 'designer',
+      onStart,
+      onStop() {},
+      onKeyDown,
+      onKeyUp,
+      onMouseMove,
+      onMouseDown,
+      onMouseUp,
+      onResize,
+      loop,
+      quickTestPlay
+    };
+  }
+
+  /* ===========================
+     World: Greenskeeper (repair + water patches dry)
+     =========================== */
+  function createGreenskeeperWorld() {
+    // concept: grid of turf patches with moisture value. Rainfall/irrigation and drying
+    const cols = 22;
+    const rows = 10;
+    const pad = 12;
+    const cellW = (canvas.width - pad*2) / cols;
+    const cellH = (canvas.height - pad*2) / rows;
+    const patches = [];
+    let lastTick = performance.now();
+    let score = 0;
+    let tasksDone = 0;
+    let gameTime = 60 * 1.5; // 90 seconds
+    let started = false;
+    let gameOver = false;
+
+    function init() {
+      patches.length = 0;
+      for (let r=0;r<rows;r++) {
+        for (let c=0;c<cols;c++) {
+          patches.push({ r, c, moisture: Math.random()*0.7 + 0.2, dryingRate: 0.0005 + Math.random()*0.0012, flagged:false });
+        }
+      }
+      score = 0; tasksDone = 0;
+      lastTick = performance.now();
+      started = true; gameOver = false;
+      hudWorld.textContent = 'Greenskeeper';
+      hudSub.textContent = 'Click dry patches to water them. Keep moisture above critical level to score.';
+      statusPill.textContent = `Time ${Math.ceil(gameTime)}s`;
+    }
+
+    function draw() {
+      ctx.fillStyle = '#dff5e7';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      patches.forEach(p => {
+        const x = pad + p.c * cellW;
+        const y = pad + p.r * cellH;
+        // color by moisture
+        const m = clamp(p.moisture, 0, 1);
+        const rVal = Math.floor(140 + (80 * (1 - m)));
+        const gVal = Math.floor(200 + (30 * m));
+        const bVal = Math.floor(100 + (60*m));
+        ctx.fillStyle = `rgb(${rVal},${gVal},${bVal})`;
+        ctx.fillRect(x+2, y+2, cellW-4, cellH-4);
+        // show droplet when low
+        if (m < 0.25) {
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.beginPath();
+          ctx.arc(x + cellW/2, y + cellH/2, 6, 0, Math.PI*2);
+          ctx.fill();
+        }
+      });
+
+      // overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      drawRoundedRect(ctx, 10, 10, 220, 40, 8);
+      ctx.fillStyle = '#fff';
+      ctx.font = '14px Inter';
+      ctx.fillText(`Score: ${score} • Tasks: ${tasksDone}`, 26, 36);
+    }
+
+    function update(dt) {
+      if (!started || gameOver) return;
+      patches.forEach(p => {
+        // drying behavior: accelerate drying with sun (simulate randomness)
+        p.moisture -= p.dryingRate * dt;
+        // if moisture very low, mark as problem
+        if (p.moisture < 0) p.moisture = 0;
+      });
+      gameTime -= dt/1000;
+      statusPill.textContent = `Time ${Math.ceil(gameTime)}s`;
+      if (gameTime <= 0) {
+        gameOver = true;
+        hudSub.textContent = 'Time up — results finalized';
+        overlayWin(`Game Over • Score: ${score}`);
+      }
+    }
+
+    function overlayWin(text) {
+      // draw overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = '26px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, canvas.width/2, canvas.height/2 - 10);
+      ctx.font = '14px Inter';
+      ctx.fillText('Play again or return to menu', canvas.width/2, canvas.height/2 + 22);
+      gameOver = true;
+    }
+
+    function cellAt(m) {
+      const c = clamp(Math.floor((m.x - pad) / cellW), 0, cols-1);
+      const r = clamp(Math.floor((m.y - pad) / cellH), 0, rows-1);
+      return patches.find(p => p.r === r && p.c === c);
+    }
+
+    function onMouseDown(m) {
+      const p = cellAt(m);
+      if (!p) return;
+      // water action: increase moisture by an amount (simulate spraying)
+      p.moisture += 0.28;
+      if (p.moisture > 1) p.moisture = 1;
+      score += 10;
+      tasksDone++;
+    }
+
+    function onStart() { init(); }
+    function onStop() {}
+    function onKeyDown() {}
+    function onKeyUp() {}
+    function onMouseMove() {}
+    function onResize() {}
+
+    function loop() {
+      if (!currentWorld || currentWorld.id !== 'greens') return;
+      const now = performance.now();
+      const dt = now - lastTick;
+      lastTick = now;
+      update(dt);
+      draw();
+      if (!gameOver) animationFrameId = requestAnimationFrame(loop);
+    }
+
+    return {
+      id: 'greens', onStart, onStop, onKeyDown, onKeyUp, onMouseMove, onMouseDown, onMouseUp() {}, onResize, loop
+    };
+  }
+
+  /* ===========================
+     World: Caddy (carrying physics)
+     =========================== */
+  function createCaddyWorld() {
+    // Objective: pick up bag at start, carry to flag stands, avoid obstacles, stamina drains
+    const bag = { x: 80, y: canvas.height - 140, carried: false };
+    const caddy = { x: 40, y: canvas.height - 140, vx: 0, vy: 0, speed: 2.2, stamina: 100 };
+    const targets = [
+      { x: canvas.width*0.33, y: canvas.height - 140, radius: 24, done:false },
+      { x: canvas.width*0.66, y: canvas.height - 160, radius: 24, done:false }
+    ];
+    const obstacles = [];
+    let tasksComplete = 0;
+    let gameOver = false;
+    let started = false;
+
+    function init() {
+      // generate obstacles
+      obstacles.length = 0;
+      for (let i=0;i<6;i++){
+        obstacles.push({ x: 160 + i*80, y: canvas.height - 200 + (i%2?-10:10), r: 14 });
+      }
+      caddy.x = 40; caddy.y = canvas.height - 140; caddy.stamina = 100; caddy.vx = 0;
+      bag.x = 80; bag.y = canvas.height - 140; bag.carried = false;
+      targets.forEach(t => t.done = false);
+      tasksComplete = 0;
+      gameOver = false;
+      started = true;
+      hudWorld.textContent = 'Caddy';
+      hudSub.textContent = 'Click to pick up bag. Use arrow keys or click to move. Carry to targets.';
+      statusPill.textContent = 'Caddy idle';
+    }
+
+    function draw() {
+      ctx.fillStyle = '#cfeee6';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      // ground
+      ctx.fillStyle = '#3a7e52';
+      ctx.fillRect(0, canvas.height - 150, canvas.width, 150);
+      // obstacles
+      obstacles.forEach(o => {
+        ctx.fillStyle = '#874d2e';
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI*2);
+        ctx.fill();
+      });
+      // targets
+      targets.forEach((t,i) => {
+        ctx.fillStyle = t.done ? '#666' : '#ffd54f';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, t.radius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Inter';
+        ctx.fillText('T'+(i+1), t.x-8, t.y+4);
+      });
+      // bag
+      ctx.fillStyle = '#b5651d';
+      if (bag.carried) {
+        // bag follows caddy
+        bag.x = caddy.x + 10; bag.y = caddy.y + 6;
+      }
+      ctx.fillRect(bag.x - 10, bag.y - 8, 20, 16);
+      // caddy
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(caddy.x, caddy.y, 11, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#333';
+      ctx.fillText('Caddy', caddy.x - 18, caddy.y - 16);
+      // stamina bar
+      ctx.fillStyle = '#0008';
+      drawRoundedRect(ctx, canvas.width - 160, 12, 140, 14, 8);
+      ctx.fillStyle = '#ff7043';
+      drawRoundedRect(ctx, canvas.width - 159, 13, (caddy.stamina/100) * 138, 12, 8);
+    }
+
+    function onMouseDown(m) {
+      // click to pick up bag (if near)
+      const dx = m.x - bag.x;
+      const dy = m.y - bag.y;
+      if (!bag.carried && Math.sqrt(dx*dx + dy*dy) < 36) {
+        bag.carried = true;
+        statusPill.textContent = 'Bag picked up';
+      } else {
+        // click to move target
+        caddy.vx = (m.x > caddy.x) ? caddy.speed : -caddy.speed;
+      }
+    }
+    function onMouseUp() { caddy.vx = 0; }
+    function onMouseMove(m) {}
+    function onKeyDown(code) {
+      if (code === 'ArrowRight') caddy.vx = caddy.speed;
+      if (code === 'ArrowLeft') caddy.vx = -caddy.speed;
+      if (code === 'ArrowUp') caddy.vy = -caddy.speed;
+      if (code === 'ArrowDown') caddy.vy = caddy.speed;
+    }
+    function onKeyUp(code) {
+      if (code === 'ArrowRight' || code === 'ArrowLeft') caddy.vx = 0;
+      if (code === 'ArrowUp' || code === 'ArrowDown') caddy.vy = 0;
+    }
+
+    function update(dt) {
+      if (!started || gameOver) return;
+      // update caddy position
+      caddy.x += caddy.vx;
+      caddy.y += (caddy.vy || 0);
+      caddy.x = clamp(caddy.x, 16, canvas.width - 16);
+      caddy.y = clamp(caddy.y, 50, canvas.height - 50);
+
+      // stamina drains when carrying
+      if (bag.carried) {
+        caddy.stamina -= 0.02 * dt;
+        if (caddy.stamina <= 0) {
+          caddy.stamina = 0;
+          bag.carried = false;
+          overlayMessage('Too tired! You dropped the bag.');
+        }
+      } else {
+        caddy.stamina += 0.01 * dt;
+        if (caddy.stamina > 100) caddy.stamina = 100;
+      }
+
+      // collisions with obstacles slows you
+      obstacles.forEach(o => {
+        const dx = caddy.x - o.x, dy = caddy.y - o.y;
+        if (Math.sqrt(dx*dx + dy*dy) < o.r + 11) {
+          // bounce back
+          caddy.x -= caddy.vx * 8;
+          caddy.stamina -= 0.5;
+        }
+      });
+
+      // reaching targets
+      targets.forEach((t,i) => {
+        const dx = caddy.x - t.x, dy = caddy.y - t.y;
+        if (!t.done && Math.sqrt(dx*dx + dy*dy) < t.radius + 8 && bag.carried) {
+          t.done = true;
+          tasksComplete++;
+          bag.carried = false;
+          score += 50;
+          statusPill.textContent = `Delivered to T${i+1}`;
+          if (tasksComplete >= targets.length) {
+            overlayMessage('All deliveries complete! Well done.');
+            gameOver = true;
+          }
+        }
+      });
+    }
+
+    function overlayMessage(msg) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = '22px Inter';
+      ctx.textAlign='center';
+      ctx.fillText(msg, canvas.width/2, canvas.height/2);
+    }
+
+    function onStart() { init(); }
+    function onStop() {}
+    function onResize() {}
+
+    function loop() {
+      if (!currentWorld || currentWorld.id !== 'caddy') return;
+      // update in time steps
+      update(16);
+      draw();
+      animationFrameId = requestAnimationFrame(loop);
+    }
+
+    return { id:'caddy', onStart, onStop, onMouseDown, onMouseUp, onMouseMove, onKeyDown, onKeyUp, onResize, loop };
+  }
+
+  /* ===========================
+     World: Club Manager (event logistics micro-game)
+     =========================== */
+  function createManagerWorld() {
+    // Simple event scheduling & budget allocation puzzle
+    let budget = 2000;
+    const players = 120;
+    const items = [
+      { id:'catering', name:'Catering', cost: 400, benefit: 60, chosen:false },
+      { id:'pr', name:'PR Campaign', cost: 300, benefit: 40, chosen:false },
+      { id:'prize', name:'Prizes', cost: 450, benefit: 70, chosen:false },
+      { id:'security', name:'Security', cost: 250, benefit: 30, chosen:false },
+      { id:'greens', name:'Extra Greens Crew', cost: 200, benefit: 25, chosen:false }
+    ];
+    let satisfaction = 40;
+    let booked = false;
+    let overlayMsg = null;
+
+    function draw() {
+      ctx.fillStyle = '#eef6fb';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      // left: items
+      ctx.fillStyle = '#fff';
+      drawRoundedRect(ctx, 20, 20, 360, canvas.height - 40, 12);
+      ctx.fillStyle = '#222';
+      ctx.font = '16px Inter';
+      ctx.fillText('Event Options', 40, 48);
+      items.forEach((it, idx) => {
+        const y = 84 + idx*56;
+        ctx.fillStyle = it.chosen ? '#d7ffd9' : '#f9f9f9';
+        drawRoundedRect(ctx, 36, y-24, 320, 44, 8);
+        ctx.fillStyle = '#333';
+        ctx.font = '14px Inter';
+        ctx.fillText(it.name + ` — $${it.cost}`, 48, y);
+        ctx.fillStyle = '#666';
+        ctx.font = '12px Inter';
+        ctx.fillText(`Benefit: +${it.benefit}% satisfaction`, 48, y+18);
+      });
+
+      // right side: budget and result
+      ctx.fillStyle = '#fff';
+      drawRoundedRect(ctx, canvas.width - 380, 20, 340, canvas.height - 40, 12);
+      ctx.fillStyle = '#333';
+      ctx.font = '16px Inter';
+      ctx.fillText('Budget', canvas.width - 360, 48);
+      ctx.font = '14px Inter';
+      ctx.fillText(`Remaining: $${budget}`, canvas.width - 360, 80);
+      ctx.fillText(`Expected satisfaction: ${satisfaction}%`, canvas.width - 360, 112);
+      // book button
+      ctx.fillStyle = '#00695c';
+      drawRoundedRect(ctx, canvas.width - 320, canvas.height - 100, 200, 44, 8);
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px Inter';
+      ctx.fillText('Book Event', canvas.width - 230, canvas.height - 72);
+    }
+
+    function onMouseDown(m) {
+      // click items left column
+      const localX = m.x, localY = m.y;
+      for (let i=0;i<items.length;i++){
+        const y = 84 + i*56;
+        if (localX >= 36 && localX <= 356 && localY >= y-24 && localY <= y+20) {
+          // toggle selection
+          const it = items[i];
+          if (!it.chosen) {
+            if (budget >= it.cost) {
+              it.chosen = true;
+              budget -= it.cost;
+              satisfaction += it.benefit;
+            } else {
+              overlayMsg = 'Not enough budget for that item.';
+              setTimeout(()=>overlayMsg = null, 1000);
+            }
+          } else {
+            it.chosen = false;
+            budget += it.cost;
+            satisfaction -= it.benefit;
+          }
+        }
+      }
+      // Book event button
+      if (m.x >= canvas.width - 320 && m.x <= canvas.width - 120 && m.y >= canvas.height - 100 && m.y <= canvas.height - 56) {
+        // finalize
+        booked = true;
+        overlayMsg = `Event Booked! Final satisfaction ${satisfaction}%`;
+        setTimeout(()=>{ overlayMsg=null; }, 2200);
+      }
+    }
+
+    function onStart() {
+      hudWorld.textContent = 'Club Manager';
+      hudSub.textContent = 'Allocate budget across items and book your event. Click options to toggle.';
+      statusPill.textContent = 'Manager mode';
+      budget = 2000; satisfaction = 40;
+      items.forEach(it => it.chosen=false);
+      booked=false;
+    }
+
+    function onStop() {}
+    function onMouseMove() {}
+    function onMouseUp() {}
+    function onKeyDown() {}
+    function onKeyUp() {}
+    function onResize() {}
+
+    function loop() {
+      if (!currentWorld || currentWorld.id !== 'manager') return;
+      draw();
+      if (overlayMsg) {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+        ctx.fillStyle = '#fff';
+        ctx.font = '18px Inter';
+        ctx.fillText(overlayMsg, canvas.width/2, canvas.height - 40);
+      }
+      animationFrameId = requestAnimationFrame(loop);
+    }
+
+    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop };
+  }
+
+  /* ===========================
+     World dispatching & startup
+     =========================== */
+
+  // world instances cached
+  const worldConstructors = {
+    'pro': createProGolferWorld,
+    'designer': createDesignerWorld,
+    'greens': createGreenskeeperWorld,
+    'caddy': createCaddyWorld,
+    'manager': createManagerWorld
+  };
+
+  function startWorld(id) {
+    if (!worldConstructors[id]) {
+      console.warn('No constructor for', id);
+      return;
+    }
+    statusPill.textContent = 'Loading...';
+    stopCurrentWorld();
+    // create new instance
+    const world = worldConstructors[id]();
+    currentWorld = world;
+    currentWorld.id = id;
+    // start-up
+    resizeCanvas(); // ensure right sizes
+    if (currentWorld.onStart) currentWorld.onStart();
+    hudWorld.textContent = worlds.find(w=>w.id===id).name;
+    hudSub.textContent = worlds.find(w=>w.id===id).summary;
+    statusPill.textContent = 'Playing';
+    // Start animation
+    (function run() {
+      if (!currentWorld) return;
+      if (currentWorld.loop) currentWorld.loop();
+      else animationFrameId = requestAnimationFrame(run);
+    })();
+  }
+
+  // Forward input events to active world
+  function forwardKeyDown(code) { if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(code); }
+  function forwardKeyUp(code) { if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(code); }
+
+  // Hook keyboard onto canvas focus
+  canvas.addEventListener('focus', () => { /* nothing */ });
+  window.addEventListener('keydown', (e)=>{ forwardKeyDown(e.code); });
+  window.addEventListener('keyup', (e)=>{ forwardKeyUp(e.code); });
+
+  // Initialize: show menu
+  showMenu();
+
+  // Expose a quick debugging API to window for testing
+  window.GolfWorlds = {
+    startWorld,
+    stopCurrentWorld,
+    showMenu,
+    canvas,
+    ctx
+  };
+
+  // Auto-focus canvas for keys
+  setTimeout(()=>{ try{ canvas.focus(); }catch(e){} }, 200);
+
+  // friendly log
+  console.log('Golf Worlds app.js loaded — available worlds:', Object.keys(worldConstructors));
+
+})();
