@@ -1,0 +1,88 @@
+diff --git a/scripts/app.js b/scripts/app.js
+index 36589da59a2a7dc07b9387aca09ae9b2107c8074..d502f1a98f7c76fa8d698f5acae48e7f6e2b332f 100644
+--- a/scripts/app.js
++++ b/scripts/app.js
+@@ -185,82 +185,81 @@ resizeCanvas();
+ 
+ // Global game state
+ let currentWorld = null;
+ let animationFrameId = null;
+ let mouse = { x: 0, y: 0, down: false };
+ canvas.addEventListener('mousemove', e => {
+   const rect = canvas.getBoundingClientRect();
+   mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+   mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+   if (currentWorld && currentWorld.onMouseMove) currentWorld.onMouseMove(mouse);
+ });
+ canvas.addEventListener('mousedown', e => { mouse.down = true; if (currentWorld && currentWorld.onMouseDown) currentWorld.onMouseDown(mouse); });
+ canvas.addEventListener('mouseup', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseUp) currentWorld.onMouseUp(mouse); });
+ canvas.addEventListener('mouseleave', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseLeave) currentWorld.onMouseLeave(mouse); });
+ 
+ // Keyboard handling (space, arrows)
+ const keys = {};
+ window.addEventListener('keydown', e => { keys[e.code] = true; if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(e.code); });
+ window.addEventListener('keyup', e => { keys[e.code] = false; if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(e.code); });
+ 
+ // Small UI functions
+ const hudWorld = document.getElementById('hud-world');
+ const hudSub = document.getElementById('hud-sub');
+ const btnBack = document.getElementById('btn-back');
+ const statusPill = document.getElementById('status-pill');
+-const ADMIN_PASSWORD = 'golf-admin-demo';
++const ADMIN_PASSWORD = '1208';
+ let adminUnlocked = false;
+ 
+ function ensureAdminAccess() {
+   if (adminUnlocked) return true;
+   const entered = window.prompt('Enter admin password');
+   if (entered === ADMIN_PASSWORD) {
+     adminUnlocked = true;
+     adminButton.textContent = '🛠️ Admin Console';
+     return true;
+   }
+   if (entered !== null) alert('Incorrect password.');
+   return false;
+ }
+ 
+ function renderAdminConsole() {
+   if (!adminUnlocked) {
+     adminConsole.innerHTML = '<p class="admin-note">Admin mode is locked.</p>';
+     return;
+   }
+ 
+   const worldName = currentWorld ? (worlds.find(w => w.id === currentWorld.id)?.name || currentWorld.id) : 'No world selected';
+   const controls = currentWorld && currentWorld.getAdminControls ? currentWorld.getAdminControls() : [];
+   const controlsHtml = controls.length
+     ? controls.map(control => `<button class="admin-action ${control.secondary ? 'secondary' : ''}" data-admin-action="${control.id}">${control.label}</button>`).join('')
+     : '<p class="admin-note">Start a world to see specific admin tools.</p>';
+ 
+   adminConsole.innerHTML = `
+     <h4 class="admin-title">Admin Console</h4>
+     <div class="admin-row"><strong>World:</strong> <span>${worldName}</span></div>
+     ${controlsHtml}
+-    <p class="admin-note">Tip: change <code>ADMIN_PASSWORD</code> in <code>scripts/app.js</code> before presenting.</p>
+   `;
+ 
+   adminConsole.querySelectorAll('[data-admin-action]').forEach(btn => {
+     btn.addEventListener('click', () => {
+       if (!currentWorld || !currentWorld.runAdminAction) return;
+       currentWorld.runAdminAction(btn.dataset.adminAction);
+       renderAdminConsole();
+     });
+   });
+ }
+ 
+ adminButton.addEventListener('click', () => {
+   if (!ensureAdminAccess()) return;
+   adminConsole.classList.toggle('hidden');
+   renderAdminConsole();
+ });
+ 
+ btnBack.addEventListener('click', () => {
+   stopCurrentWorld();
+   showMenu();
+ });
+ 
+ // Menu handlers
+ function showMenu() {
+   // highlight none

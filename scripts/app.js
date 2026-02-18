@@ -207,7 +207,7 @@ const hudWorld = document.getElementById('hud-world');
 const hudSub = document.getElementById('hud-sub');
 const btnBack = document.getElementById('btn-back');
 const statusPill = document.getElementById('status-pill');
-const ADMIN_PASSWORD = 'golf-admin-demo';
+const ADMIN_PASSWORD = '1208';
 let adminUnlocked = false;
 
 function ensureAdminAccess() {
@@ -238,7 +238,6 @@ function renderAdminConsole() {
     <h4 class="admin-title">Admin Console</h4>
     <div class="admin-row"><strong>World:</strong> <span>${worldName}</span></div>
     ${controlsHtml}
-    <p class="admin-note">Tip: change <code>ADMIN_PASSWORD</code> in <code>scripts/app.js</code> before presenting.</p>
   `;
 
   adminConsole.querySelectorAll('[data-admin-action]').forEach(btn => {
