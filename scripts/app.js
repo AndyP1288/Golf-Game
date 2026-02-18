@@ -48,8 +48,12 @@
     .world-info{flex:1}
     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
     .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
-    .hud{position:absolute;left:20px;top:20px;background:#ffffffaa;padding:8px 10px;border-radius:8px;backdrop-filter:blur(4px)}
-    .bottom-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#00000011;padding:8px 12px;border-radius:999px}
+    .hud{position:absolute;left:16px;top:16px;max-width:360px;background:#ffffffd9;padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px);z-index:3}
+    .instructions{position:absolute;right:16px;top:16px;max-width:380px;max-height:42%;overflow:auto;background:#ffffffde;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,.08);z-index:3}
+    .instructions h4{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
+    .instructions ul{margin:0;padding-left:18px}
+    .instructions li{margin:2px 0;font-size:12px;color:#123}
+    .bottom-bar{position:absolute;left:16px;bottom:16px;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
     .small{font-size:12px;color:#222}
     .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
     .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
@@ -127,6 +131,16 @@ hud.className = 'hud small';
 hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
 right.appendChild(hud);
 
+const instructionsBox = document.createElement('div');
+instructionsBox.className = 'instructions small';
+instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
+right.appendChild(instructionsBox);
+
+function setInstructions(title, items) {
+  const list = items.map(item => `<li>${item}</li>`).join('');
+  instructionsBox.innerHTML = `<h4>${title}</h4><ul>${list}</ul>`;
+}
+
 // bottom bar
 const bottom = document.createElement('div');
 bottom.className = 'bottom-bar small';
@@ -188,6 +202,7 @@ function showMenu() {
   Object.values(tiles).forEach(t => t.style.opacity = '1');
   hudWorld.textContent = 'Select a world';
   hudSub.textContent = 'Click a tile to begin.';
+  setInstructions('Instructions', ['Choose any world tile and press Play.', 'Use Back to Menu any time to switch careers.']);
   statusPill.textContent = 'Idle';
   // stop any world
   stopCurrentWorld();
@@ -437,6 +452,24 @@ function createProGolferWorld() {
     }
   }
   function onMouseDown(m) {
+    if (showWinOverlay) {
+      const playBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 8, w: 160, h: 40 };
+      const menuBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 56, w: 160, h: 40 };
+
+      if (m.x >= playBtn.x && m.x <= playBtn.x + playBtn.w &&
+          m.y >= playBtn.y && m.y <= playBtn.y + playBtn.h) {
+        resetBall();
+        showWinOverlay = false;
+      }
+
+      if (m.x >= menuBtn.x && m.x <= menuBtn.x + menuBtn.w &&
+          m.y >= menuBtn.y && m.y <= menuBtn.y + menuBtn.h) {
+        showWinOverlay = false;
+        showMenu();
+      }
+      return;
+    }
+
     const dx = m.x - ball.x;
     const dy = m.y - ball.y;
     if (Math.sqrt(dx*dx + dy*dy) < 40 && ball.onGround) {
@@ -464,6 +497,12 @@ function createProGolferWorld() {
   function onStart() {
     hudWorld.textContent = 'Pro Golfer';
     hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
+    setInstructions('Pro Golfer Controls', [
+      'Space (hold/release): charge and shoot',
+      'Arrow Up / Down: adjust launch angle',
+      'Mouse drag: aim direction',
+      'Click + hold near ball: charge shot with mouse'
+    ]);
     statusPill.textContent = `Par ${par} • Strokes ${strokes}/${par}`;
     windStrength = (Math.random() * 1.6 - 0.8);
   }
@@ -493,30 +532,15 @@ function createProGolferWorld() {
       ctx.fillText(overlayText, canvas.width/2, canvas.height/2 - 20);
 
 
-      // Play Again button (center)
+      // Play Again & Menu buttons (center)
       const playBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 8, w: 160, h: 40 };
+      const menuBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 56, w: 160, h: 40 };
       ctx.fillStyle = '#fff';
       ctx.fillRect(playBtn.x, playBtn.y, playBtn.w, playBtn.h);
+      ctx.fillRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h);
       ctx.fillStyle = '#003b2e';
       ctx.fillText('Play Again', canvas.width/2, canvas.height/2 + 36);
-
-      canvas.onclick = (e) => {
-        const mx = e.offsetX;
-        const my = e.offsetY;
-
-        if (mx >= menuBtn.x && mx <= menuBtn.x + menuBtn.w &&
-            my >= menuBtn.y && my <= menuBtn.y + menuBtn.h) {
-          showWinOverlay = false;
-          currentWorld = null;
-        }
-
-        if (mx >= playBtn.x && mx <= playBtn.x + playBtn.w &&
-            my >= playBtn.y && my <= playBtn.y + playBtn.h) {
-          resetBall();
-        }
-      };
-    } else {
-      canvas.onclick = null;
+      ctx.fillText('Back to Menu', canvas.width/2, canvas.height/2 + 84);
     }
 
     animationFrameId = requestAnimationFrame(loop);
@@ -575,6 +599,17 @@ function createDesignerWorld() {
     console.log("Designer mode started");
     hudWorld.textContent = 'Course Designer';
     hudSub.textContent = 'Use mouse drag to paint. Click toolbar to change brush. Place a hole and tee to test play.';
+    setInstructions('Course Designer Controls', [
+      '1: Grass brush',
+      '2: Sand brush',
+      '3: Water brush',
+      '4: Green brush',
+      '5: Eraser',
+      'H: place hole on next click',
+      'T: place tee on next click',
+      'Play button: test your hole',
+      'In Play Mode: Arrow Left/Right to aim, Space hold/release to shoot'
+    ]);
     statusPill.textContent = 'Designer mode';
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) grid[r][c] = 0;
     holeCell = null;
@@ -971,6 +1006,12 @@ function createGreenskeeperWorld() {
     started = true; gameOver = false;
     hudWorld.textContent = 'Greenskeeper';
     hudSub.textContent = 'Click dry patches to water them. Keep moisture above critical level to score.';
+    setInstructions('Greenskeeper Controls', [
+      'Click any patch to re-water it (+score)',
+      'Every 10 tasks: sprinkler power-up activates',
+      'When sprinkler is active, click to water a large area',
+      'Keep moisture from dropping too low before time runs out'
+    ]);
     statusPill.textContent = `Time ${Math.ceil(gameTime)}s`;
     sprinklerActive = false;
     sprinklerTimer = 0;
@@ -1229,6 +1270,12 @@ function createCaddyWorld() {
     started = true;
     hudWorld.textContent = "Caddy Challenge";
     hudSub.textContent = `Round ${round}: Carry all bags to the golfer without hitting traps.`;
+    setInstructions('Caddy Controls', [
+      'Arrow keys: move the caddy',
+      'Touch bags to pick them up',
+      'Avoid red trap circles',
+      'Deliver to golfer, then answer the golf situation question'
+    ]);
     statusPill.textContent = `Round ${round}`;
   }
 
@@ -1589,6 +1636,12 @@ function createCaddyWorld() {
     function onStart() {
       hudWorld.textContent = 'Club Manager';
       hudSub.textContent = 'Allocate budget across items and book your event. Click options to toggle.';
+      setInstructions('Club Manager Controls', [
+        'Click an option card to toggle it on/off',
+        'Chosen options reduce budget and increase satisfaction',
+        'Book Event button finalizes your current plan',
+        'Balance spending so satisfaction stays high'
+      ]);
       statusPill.textContent = 'Manager mode';
       budget = 2000; satisfaction = 40;
       items.forEach(it => it.chosen=false);
@@ -1645,9 +1698,6 @@ function createCaddyWorld() {
     // start-up
     resizeCanvas(); // ensure right sizes
     if (currentWorld.onStart) currentWorld.onStart();
-    hudWorld.textContent = worlds.find(w=>w.id===id).name;
-    hudSub.textContent = worlds.find(w=>w.id===id).summary;
-    statusPill.textContent = 'Playing';
     // Start animation
     (function run() {
       if (!currentWorld) return;
@@ -1656,14 +1706,8 @@ function createCaddyWorld() {
     })();
   }
 
-  // Forward input events to active world
-  function forwardKeyDown(code) { if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(code); }
-  function forwardKeyUp(code) { if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(code); }
-
   // Hook keyboard onto canvas focus
   canvas.addEventListener('focus', () => { /* nothing */ });
-  window.addEventListener('keydown', (e)=>{ forwardKeyDown(e.code); });
-  window.addEventListener('keyup', (e)=>{ forwardKeyUp(e.code); });
 
   // Initialize: show menu
   showMenu();

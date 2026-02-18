@@ -1,0 +1,633 @@
+diff --git a/scripts/app.js b/scripts/app.js
+index 759c847afa634b6ca7e32b32d71d994ef9b112e6..3e11ce5a7fa0b75f373d257f445c846718c176dc 100644
+--- a/scripts/app.js
++++ b/scripts/app.js
+@@ -26,52 +26,56 @@
+   // Create root element if not already present
+   const existingRoot = document.getElementById('app-root');
+   const root = existingRoot || (function () {
+     const r = document.createElement('div');
+     r.id = 'app-root';
+     document.body.appendChild(r);
+     return r;
+   })();
+ 
+   // Basic stylesheet injection for overlay UI
+   const style = document.createElement('style');
+   style.textContent = `
+     :root{--bg:#e7f4f2;--panel:#ffffffcc;--accent:#00695c;--muted:#6b6b6b}
+     body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+     #app-root{position:fixed;left:0;top:0;right:0;bottom:0;background:linear-gradient(180deg,var(--bg),#d2f0ea);display:flex;align-items:center;justify-content:center}
+     .panel{background:var(--panel);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:18px;max-width:1200px;width:95%;max-height:90vh;overflow:hidden;display:flex;flex-direction:row;gap:16px}
+     .menu-col{width:340px;display:flex;flex-direction:column;gap:12px}
+     .title{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+     .subtitle{font-size:13px;color:var(--muted);margin-bottom:8px}
+     .world-tile{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,.04);transition:transform .12s ease, box-shadow .12s ease}
+     .world-tile:hover{transform:translateY(-4px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
+     .world-thumb{width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333}
+     .world-info{flex:1}
+     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+     .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+-    .hud{position:absolute;left:20px;top:20px;background:#ffffffaa;padding:8px 10px;border-radius:8px;backdrop-filter:blur(4px)}
+-    .bottom-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;background:#00000011;padding:8px 12px;border-radius:999px}
++    .hud{position:absolute;left:16px;top:16px;max-width:360px;background:#ffffffd9;padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px);z-index:3}
++    .instructions{position:absolute;right:16px;top:16px;max-width:380px;max-height:42%;overflow:auto;background:#ffffffde;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,.08);z-index:3}
++    .instructions h4{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
++    .instructions ul{margin:0;padding-left:18px}
++    .instructions li{margin:2px 0;font-size:12px;color:#123}
++    .bottom-bar{position:absolute;left:16px;bottom:16px;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
+     .small{font-size:12px;color:#222}
+     .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
+     .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+     .overlay-win{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.5));color:white;font-size:20px;flex-direction:column;gap:12px}
+     .input{padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.08)}
+     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.06)}
+     .muted{color:#666;font-size:12px}
+   `;
+   document.head.appendChild(style);
+ 
+ /* =========================
+    Global Canvas & Systems
+    ========================= */
+ 
+ // Create canvas area inside panel
+ const panel = document.createElement('div');
+ panel.className = 'panel';
+ 
+ // Left column: menu / world list
+ const left = document.createElement('div');
+ left.className = 'menu-col'; // <-- scrollable now
+ left.style.overflowY = 'auto'; // Added scroll
+ 
+ const title = document.createElement('div');
+ title.className = 'title';
+@@ -105,50 +109,60 @@ worlds.forEach(w => {
+                       <div class="muted">${w.summary}</div>
+                     </div>
+                     <div><button class="play-btn">Play</button></div>`;
+   left.appendChild(tile);
+   tiles[w.id] = tile;
+ });
+ 
+ // Right column: canvas + HUD
+ const right = document.createElement('div');
+ right.className = 'canvas-wrap';
+ 
+ // Canvas setup
+ const canvas = document.createElement('canvas');
+ canvas.id = 'gw-canvas';
+ canvas.style.width = '100%';
+ canvas.style.height = '100%';
+ canvas.tabIndex = 0; // to capture keys
+ right.appendChild(canvas);
+ 
+ // HUD (top-left)
+ const hud = document.createElement('div');
+ hud.className = 'hud small';
+ hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
+ right.appendChild(hud);
+ 
++const instructionsBox = document.createElement('div');
++instructionsBox.className = 'instructions small';
++instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
++right.appendChild(instructionsBox);
++
++function setInstructions(title, items) {
++  const list = items.map(item => `<li>${item}</li>`).join('');
++  instructionsBox.innerHTML = `<h4>${title}</h4><ul>${list}</ul>`;
++}
++
+ // bottom bar
+ const bottom = document.createElement('div');
+ bottom.className = 'bottom-bar small';
+ bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
+ right.appendChild(bottom);
+ 
+ panel.appendChild(left);
+ panel.appendChild(right);
+ root.appendChild(panel);
+ 
+ // Responsive canvas sizing logic
+ const ctx = canvas.getContext('2d');
+ function resizeCanvas() {
+   // physical size equals container size for crisp drawing
+   const rect = right.getBoundingClientRect();
+   canvas.width = Math.max(800, Math.floor(rect.width));
+   canvas.height = Math.max(480, Math.floor(rect.height));
+ }
+ window.addEventListener('resize', () => {
+   resizeCanvas();
+   if (currentWorld && currentWorld.onResize) currentWorld.onResize();
+ });
+ 
+ resizeCanvas();
+ 
+@@ -166,50 +180,51 @@ canvas.addEventListener('mousedown', e => { mouse.down = true; if (currentWorld
+ canvas.addEventListener('mouseup', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseUp) currentWorld.onMouseUp(mouse); });
+ canvas.addEventListener('mouseleave', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseLeave) currentWorld.onMouseLeave(mouse); });
+ 
+ // Keyboard handling (space, arrows)
+ const keys = {};
+ window.addEventListener('keydown', e => { keys[e.code] = true; if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(e.code); });
+ window.addEventListener('keyup', e => { keys[e.code] = false; if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(e.code); });
+ 
+ // Small UI functions
+ const hudWorld = document.getElementById('hud-world');
+ const hudSub = document.getElementById('hud-sub');
+ const btnBack = document.getElementById('btn-back');
+ const statusPill = document.getElementById('status-pill');
+ 
+ btnBack.addEventListener('click', () => {
+   stopCurrentWorld();
+   showMenu();
+ });
+ 
+ // Menu handlers
+ function showMenu() {
+   // highlight none
+   Object.values(tiles).forEach(t => t.style.opacity = '1');
+   hudWorld.textContent = 'Select a world';
+   hudSub.textContent = 'Click a tile to begin.';
++  setInstructions('Instructions', ['Choose any world tile and press Play.', 'Use Back to Menu any time to switch careers.']);
+   statusPill.textContent = 'Idle';
+   // stop any world
+   stopCurrentWorld();
+ }
+ 
+ Object.values(tiles).forEach(tile => {
+   tile.addEventListener('click', () => {
+     const w = tile.dataset.world;
+     startWorld(w);
+   });
+   const btn = tile.querySelector('button.play-btn');
+   btn.addEventListener('click', (ev) => {
+     ev.stopPropagation();
+     const w = tile.dataset.world;
+     startWorld(w);
+   });
+ });
+ 
+ // Stopping current world (cleanup)
+ function stopCurrentWorld() {
+   if (animationFrameId) {
+     cancelAnimationFrame(animationFrameId);
+     animationFrameId = null;
+   }
+   if (currentWorld && currentWorld.onStop) currentWorld.onStop();
+@@ -415,130 +430,139 @@ function createProGolferWorld() {
+     if (code === 'Space' && charging && ball.onGround) {
+       charging = false;
+       const shotPower = clamp(power, 2, 100);
+       const speed = shotPower / 3.5;
+       ball.vx = Math.cos(angle) * speed;
+       ball.vy = -Math.sin(angle) * speed;
+       ball.onGround = false;
+       strokes += 1;
+       lastShotTime = performance.now();
+       statusPill.textContent = `Strokes ${strokes}/${par}`;
+       if (strokes > par) {
+         overlayText = 'Par exceeded. Resetting...';
+         showWinOverlay = true;
+       }
+     }
+   }
+ 
+   function onMouseMove(m) {
+     if (ball.onGround && !charging) {
+       const dx = m.x - ball.x;
+       const dy = ball.y - m.y;
+       angle = clamp(Math.atan2(dy, dx), 0.12, Math.PI*0.75);
+     }
+   }
+   function onMouseDown(m) {
++    if (showWinOverlay) {
++      const playBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 8, w: 160, h: 40 };
++      const menuBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 56, w: 160, h: 40 };
++
++      if (m.x >= playBtn.x && m.x <= playBtn.x + playBtn.w &&
++          m.y >= playBtn.y && m.y <= playBtn.y + playBtn.h) {
++        resetBall();
++        showWinOverlay = false;
++      }
++
++      if (m.x >= menuBtn.x && m.x <= menuBtn.x + menuBtn.w &&
++          m.y >= menuBtn.y && m.y <= menuBtn.y + menuBtn.h) {
++        showWinOverlay = false;
++        showMenu();
++      }
++      return;
++    }
++
+     const dx = m.x - ball.x;
+     const dy = m.y - ball.y;
+     if (Math.sqrt(dx*dx + dy*dy) < 40 && ball.onGround) {
+       charging = true; power = 0;
+     }
+   }
+   function onMouseUp(m) {
+     if (charging && ball.onGround) {
+       charging = false;
+       const shotPower = clamp(power, 2, 100);
+       const speed = shotPower / 3.5;
+       ball.vx = Math.cos(angle) * speed;
+       ball.vy = -Math.sin(angle) * speed;
+       ball.onGround = false;
+       strokes += 1;
+       statusPill.textContent = `Strokes ${strokes}/${par}`;
+       if (strokes > par) {
+         overlayText = 'Par exceeded. Resetting...';
+         showWinOverlay = true;
+       }
+     }
+   }
+ 
+   function onResize() {}
+   function onStart() {
+     hudWorld.textContent = 'Pro Golfer';
+     hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
++    setInstructions('Pro Golfer Controls', [
++      'Space (hold/release): charge and shoot',
++      'Arrow Up / Down: adjust launch angle',
++      'Mouse drag: aim direction',
++      'Click + hold near ball: charge shot with mouse'
++    ]);
+     statusPill.textContent = `Par ${par} • Strokes ${strokes}/${par}`;
+     windStrength = (Math.random() * 1.6 - 0.8);
+   }
+   function onStop() {}
+ 
+   // Render/Update loop
+   function loop() {
+     if (!currentWorld || currentWorld.id !== 'pro') return;
+ 
+     if (charging && ball.onGround) {
+       power += 1.6;
+       if (power > 100) power = 100;
+     }
+ 
+     physicsStep();
+     if (ball) checkHoleIn();
+     drawScene();
+ 
+     // overlay with Play Again & Menu
+     if (showWinOverlay) {
+       ctx.fillStyle = 'rgba(0,0,0,0.32)';
+       ctx.fillRect(0, 0, canvas.width, canvas.height);
+ 
+       ctx.fillStyle = '#fff';
+       ctx.font = 'bold 28px Inter';
+       ctx.textAlign = 'center';
+       ctx.fillText(overlayText, canvas.width/2, canvas.height/2 - 20);
+ 
+ 
+-      // Play Again button (center)
++      // Play Again & Menu buttons (center)
+       const playBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 8, w: 160, h: 40 };
++      const menuBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 56, w: 160, h: 40 };
+       ctx.fillStyle = '#fff';
+       ctx.fillRect(playBtn.x, playBtn.y, playBtn.w, playBtn.h);
++      ctx.fillRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h);
+       ctx.fillStyle = '#003b2e';
+       ctx.fillText('Play Again', canvas.width/2, canvas.height/2 + 36);
+-
+-      canvas.onclick = (e) => {
+-        const mx = e.offsetX;
+-        const my = e.offsetY;
+-
+-        if (mx >= menuBtn.x && mx <= menuBtn.x + menuBtn.w &&
+-            my >= menuBtn.y && my <= menuBtn.y + menuBtn.h) {
+-          showWinOverlay = false;
+-          currentWorld = null;
+-        }
+-
+-        if (mx >= playBtn.x && mx <= playBtn.x + playBtn.w &&
+-            my >= playBtn.y && my <= playBtn.y + playBtn.h) {
+-          resetBall();
+-        }
+-      };
+-    } else {
+-      canvas.onclick = null;
++      ctx.fillText('Back to Menu', canvas.width/2, canvas.height/2 + 84);
+     }
+ 
+     animationFrameId = requestAnimationFrame(loop);
+   }
+ 
+   return {
+     id: 'pro',
+     onStart,
+     onStop,
+     onKeyDown,
+     onKeyUp,
+     onMouseMove,
+     onMouseDown,
+     onMouseUp,
+     onResize,
+     loop
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+@@ -553,50 +577,61 @@ function createDesignerWorld() {
+   const cellW = canvas.width / cols;
+   const cellH = canvas.height / rows;
+   const grid = new Array(rows).fill(null).map(() => new Array(cols).fill(0)); // default grass
+ 
+   let brush = 'sand';
+   let placingHole = false;
+   let placingTee = false;
+   let holeCell = null;
+   let teeCell = null;
+   let hoverCell = null;
+   let inPlayMode = false;
+ 
+   // Play mode variables
+   let ball = { x: 0, y: 0, vx: 0, vy: 0, moving: false };
+   let arrow = { angle: 0 };
+   let power = 0;
+   let strokes = 0;
+   let powerCharging = false;
+   let rotatingLeft = false;
+   let rotatingRight = false;
+ 
+   function onStart() {
+     console.log("Designer mode started");
+     hudWorld.textContent = 'Course Designer';
+     hudSub.textContent = 'Use mouse drag to paint. Click toolbar to change brush. Place a hole and tee to test play.';
++    setInstructions('Course Designer Controls', [
++      '1: Grass brush',
++      '2: Sand brush',
++      '3: Water brush',
++      '4: Green brush',
++      '5: Eraser',
++      'H: place hole on next click',
++      'T: place tee on next click',
++      'Play button: test your hole',
++      'In Play Mode: Arrow Left/Right to aim, Space hold/release to shoot'
++    ]);
+     statusPill.textContent = 'Designer mode';
+     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) grid[r][c] = 0;
+     holeCell = null;
+     teeCell = null;
+     inPlayMode = false;
+   }
+ 
+   function worldToCell(mx, my) {
+     const c = clamp(Math.floor(mx / cellW), 0, cols - 1);
+     const r = clamp(Math.floor(my / cellH), 0, rows - 1);
+     return { r, c };
+   }
+ 
+   function paintAt(mx, my) {
+     if (inPlayMode) return;
+ 
+     const { r, c } = worldToCell(mx, my);
+     if (placingHole) { holeCell = { r, c }; placingHole = false; return; }
+     if (placingTee) { teeCell = { r, c }; placingTee = false; return; }
+ 
+     if (brush === 'eraser') {
+       if (holeCell && holeCell.r === r && holeCell.c === c) holeCell = null;
+       if (teeCell && teeCell.r === r && teeCell.c === c) teeCell = null;
+       grid[r][c] = 0;
+       return;
+@@ -949,50 +984,56 @@ function createGreenskeeperWorld() {
+   let sprinklerTimer = 0;
+   const SPRINKLER_RADIUS = 75; // much bigger radius
+   const SPRINKLER_DURATION = 3000; // milliseconds
+   const SPRINKLER_UNLOCK = 10; // tasksDone to unlock
+   let mousePos = null;
+ 
+   function init() {
+     patches.length = 0;
+     for (let r=0; r<rows; r++) {
+       for (let c=0; c<cols; c++) {
+         patches.push({
+           r,
+           c,
+           moisture: Math.random()*0.7 + 0.2,
+           // Extremely slow drying for relaxed gameplay
+           dryingRate: 0.00001 + Math.random() * 0.00002,
+           flagged:false
+         });
+       }
+     }
+     score = 0; tasksDone = 0;
+     lastTick = performance.now();
+     started = true; gameOver = false;
+     hudWorld.textContent = 'Greenskeeper';
+     hudSub.textContent = 'Click dry patches to water them. Keep moisture above critical level to score.';
++    setInstructions('Greenskeeper Controls', [
++      'Click any patch to re-water it (+score)',
++      'Every 10 tasks: sprinkler power-up activates',
++      'When sprinkler is active, click to water a large area',
++      'Keep moisture from dropping too low before time runs out'
++    ]);
+     statusPill.textContent = `Time ${Math.ceil(gameTime)}s`;
+     sprinklerActive = false;
+     sprinklerTimer = 0;
+   }
+ 
+   function draw() {
+     ctx.fillStyle = '#dff5e7';
+     ctx.fillRect(0, 0, canvas.width, canvas.height);
+ 
+     const instructionBarHeight = 60; // Skip drawing patches under top HUD
+     patches.forEach(p => {
+       const x = pad + p.c * cellW;
+       const y = pad + p.r * cellH;
+       if (y < instructionBarHeight) return; // skip patches under HUD
+ 
+       const m = clamp(p.moisture, 0, 1);
+       const rVal = Math.floor(140 + (80 * (1 - m)));
+       const gVal = Math.floor(200 + (30 * m));
+       const bVal = Math.floor(100 + (60*m));
+       ctx.fillStyle = `rgb(${rVal},${gVal},${bVal})`;
+       ctx.fillRect(x+2, y+2, cellW-4, cellH-4);
+ 
+       if (m < 0.25) {
+         ctx.fillStyle = 'rgba(255,255,255,0.8)';
+         ctx.beginPath();
+@@ -1207,50 +1248,56 @@ function createCaddyWorld() {
+         r: 12 + Math.random() * 4,
+       });
+     }
+ 
+     // Generate bags (not overlapping traps)
+     for (let i = 0; i < bagCount; i++) {
+       let x, y, valid = false;
+       while (!valid) {
+         x = 120 + Math.random() * (courseLength - 150);
+         y = canvas.height - 140;
+         valid = !traps.some((t) => Math.hypot(x - t.x, y - t.y) < t.r + 20);
+       }
+       bags.push({ x, y, carried: false, delivered: false });
+     }
+ 
+     // Golfer target
+     golfers.push({
+       x: courseLength,
+       y: canvas.height - 150,
+       reached: false,
+     });
+ 
+     started = true;
+     hudWorld.textContent = "Caddy Challenge";
+     hudSub.textContent = `Round ${round}: Carry all bags to the golfer without hitting traps.`;
++    setInstructions('Caddy Controls', [
++      'Arrow keys: move the caddy',
++      'Touch bags to pick them up',
++      'Avoid red trap circles',
++      'Deliver to golfer, then answer the golf situation question'
++    ]);
+     statusPill.textContent = `Round ${round}`;
+   }
+ 
+   function update(dt) {
+     if (!started || showingQuestion) return;
+ 
+     caddy.x += caddy.vx;
+     caddy.y += caddy.vy;
+     caddy.x = clamp(caddy.x, 16, canvas.width - 16);
+     caddy.y = clamp(caddy.y, 50, canvas.height - 50);
+ 
+     // stamina logic
+     if (caddy.vx === 0 && caddy.vy === 0) {
+       caddy.stamina += 0.05 * dt;
+       if (caddy.stamina > 100) caddy.stamina = 100;
+     }
+ 
+     bags.forEach((bag) => {
+       if (!bag.carried && !bag.delivered && Math.hypot(caddy.x - bag.x, caddy.y - bag.y) < 20) {
+         bag.carried = true;
+         statusPill.textContent = "Picked up bag!";
+       }
+       if (bag.carried) {
+         bag.x = caddy.x + 10;
+         bag.y = caddy.y;
+@@ -1567,50 +1614,56 @@ function createCaddyWorld() {
+               budget -= it.cost;
+               satisfaction += it.benefit;
+             } else {
+               overlayMsg = 'Not enough budget for that item.';
+               setTimeout(()=>overlayMsg = null, 1000);
+             }
+           } else {
+             it.chosen = false;
+             budget += it.cost;
+             satisfaction -= it.benefit;
+           }
+         }
+       }
+       // Book event button
+       if (m.x >= canvas.width - 320 && m.x <= canvas.width - 120 && m.y >= canvas.height - 100 && m.y <= canvas.height - 56) {
+         // finalize
+         booked = true;
+         overlayMsg = `Event Booked! Final satisfaction ${satisfaction}%`;
+         setTimeout(()=>{ overlayMsg=null; }, 2200);
+       }
+     }
+ 
+     function onStart() {
+       hudWorld.textContent = 'Club Manager';
+       hudSub.textContent = 'Allocate budget across items and book your event. Click options to toggle.';
++      setInstructions('Club Manager Controls', [
++        'Click an option card to toggle it on/off',
++        'Chosen options reduce budget and increase satisfaction',
++        'Book Event button finalizes your current plan',
++        'Balance spending so satisfaction stays high'
++      ]);
+       statusPill.textContent = 'Manager mode';
+       budget = 2000; satisfaction = 40;
+       items.forEach(it => it.chosen=false);
+       booked=false;
+     }
+ 
+     function onStop() {}
+     function onMouseMove() {}
+     function onMouseUp() {}
+     function onKeyDown() {}
+     function onKeyUp() {}
+     function onResize() {}
+ 
+     function loop() {
+       if (!currentWorld || currentWorld.id !== 'manager') return;
+       draw();
+       if (overlayMsg) {
+         ctx.fillStyle = 'rgba(0,0,0,0.4)';
+         ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+         ctx.fillStyle = '#fff';
+         ctx.font = '18px Inter';
+         ctx.fillText(overlayMsg, canvas.width/2, canvas.height - 40);
+       }
+       animationFrameId = requestAnimationFrame(loop);
+     }
+@@ -1623,64 +1676,55 @@ function createCaddyWorld() {
+      =========================== */
+ 
+   // world instances cached
+   const worldConstructors = {
+     'pro': createProGolferWorld,
+     'designer': createDesignerWorld,
+     'greens': createGreenskeeperWorld,
+     'caddy': createCaddyWorld,
+     'manager': createManagerWorld
+   };
+ 
+   function startWorld(id) {
+     if (!worldConstructors[id]) {
+       console.warn('No constructor for', id);
+       return;
+     }
+     statusPill.textContent = 'Loading...';
+     stopCurrentWorld();
+     // create new instance
+     const world = worldConstructors[id]();
+     currentWorld = world;
+     currentWorld.id = id;
+     // start-up
+     resizeCanvas(); // ensure right sizes
+     if (currentWorld.onStart) currentWorld.onStart();
+-    hudWorld.textContent = worlds.find(w=>w.id===id).name;
+-    hudSub.textContent = worlds.find(w=>w.id===id).summary;
+-    statusPill.textContent = 'Playing';
+     // Start animation
+     (function run() {
+       if (!currentWorld) return;
+       if (currentWorld.loop) currentWorld.loop();
+       else animationFrameId = requestAnimationFrame(run);
+     })();
+   }
+ 
+-  // Forward input events to active world
+-  function forwardKeyDown(code) { if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(code); }
+-  function forwardKeyUp(code) { if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(code); }
+-
+   // Hook keyboard onto canvas focus
+   canvas.addEventListener('focus', () => { /* nothing */ });
+-  window.addEventListener('keydown', (e)=>{ forwardKeyDown(e.code); });
+-  window.addEventListener('keyup', (e)=>{ forwardKeyUp(e.code); });
+ 
+   // Initialize: show menu
+   showMenu();
+ 
+   // Expose a quick debugging API to window for testing
+   window.GolfWorlds = {
+     startWorld,
+     stopCurrentWorld,
+     showMenu,
+     canvas,
+     ctx
+   };
+ 
+   // Auto-focus canvas for keys
+   setTimeout(()=>{ try{ canvas.focus(); }catch(e){} }, 200);
+ 
+   // friendly log
+   console.log('Golf Worlds app.js loaded — available worlds:', Object.keys(worldConstructors));
+ 
+ })();
