@@ -1,0 +1,9 @@
+git apply patch1.patch
+git apply patch2.patch
+git apply patch3.patch
+
+
+git status
+git add .
+git commit -m "Applied Codex patches"
+git push

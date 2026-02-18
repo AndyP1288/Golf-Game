@@ -61,6 +61,14 @@
     .input{padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.08)}
     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.06)}
     .muted{color:#666;font-size:12px}
+    .admin-btn{background:#2b2b2b;color:#fff;border:none;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:12px}
+    .admin-console{position:absolute;right:16px;bottom:64px;width:320px;max-height:55%;overflow:auto;background:#ffffffef;border:1px solid rgba(0,0,0,.18);border-radius:10px;padding:12px;z-index:4;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+    .admin-console.hidden{display:none}
+    .admin-title{font-size:14px;font-weight:700;margin:0 0 8px 0;color:#16332f}
+    .admin-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .admin-action{width:100%;text-align:left;background:#0f766e;color:#fff;border:none;border-radius:8px;padding:8px;cursor:pointer;font-size:12px;margin-top:6px}
+    .admin-action.secondary{background:#475569}
+    .admin-note{font-size:11px;color:#444;margin-top:8px}
   `;
   document.head.appendChild(style);
 
@@ -87,6 +95,11 @@ subtitle.textContent = 'Jump into immersive mini-worlds that demonstrate 5 diffe
 
 left.appendChild(title);
 left.appendChild(subtitle);
+
+const adminButton = document.createElement('button');
+adminButton.className = 'admin-btn';
+adminButton.textContent = '🔒 Admin Console';
+left.appendChild(adminButton);
 
 // world definitions (id, name, summary, color)
 const worlds = [
@@ -135,6 +148,10 @@ const instructionsBox = document.createElement('div');
 instructionsBox.className = 'instructions small';
 instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
 right.appendChild(instructionsBox);
+
+const adminConsole = document.createElement('div');
+adminConsole.className = 'admin-console hidden';
+right.appendChild(adminConsole);
 
 function setInstructions(title, items) {
   const list = items.map(item => `<li>${item}</li>`).join('');
@@ -190,6 +207,54 @@ const hudWorld = document.getElementById('hud-world');
 const hudSub = document.getElementById('hud-sub');
 const btnBack = document.getElementById('btn-back');
 const statusPill = document.getElementById('status-pill');
+const ADMIN_PASSWORD = 'golf-admin-demo';
+let adminUnlocked = false;
+
+function ensureAdminAccess() {
+  if (adminUnlocked) return true;
+  const entered = window.prompt('Enter admin password');
+  if (entered === ADMIN_PASSWORD) {
+    adminUnlocked = true;
+    adminButton.textContent = '🛠️ Admin Console';
+    return true;
+  }
+  if (entered !== null) alert('Incorrect password.');
+  return false;
+}
+
+function renderAdminConsole() {
+  if (!adminUnlocked) {
+    adminConsole.innerHTML = '<p class="admin-note">Admin mode is locked.</p>';
+    return;
+  }
+
+  const worldName = currentWorld ? (worlds.find(w => w.id === currentWorld.id)?.name || currentWorld.id) : 'No world selected';
+  const controls = currentWorld && currentWorld.getAdminControls ? currentWorld.getAdminControls() : [];
+  const controlsHtml = controls.length
+    ? controls.map(control => `<button class="admin-action ${control.secondary ? 'secondary' : ''}" data-admin-action="${control.id}">${control.label}</button>`).join('')
+    : '<p class="admin-note">Start a world to see specific admin tools.</p>';
+
+  adminConsole.innerHTML = `
+    <h4 class="admin-title">Admin Console</h4>
+    <div class="admin-row"><strong>World:</strong> <span>${worldName}</span></div>
+    ${controlsHtml}
+    <p class="admin-note">Tip: change <code>ADMIN_PASSWORD</code> in <code>scripts/app.js</code> before presenting.</p>
+  `;
+
+  adminConsole.querySelectorAll('[data-admin-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!currentWorld || !currentWorld.runAdminAction) return;
+      currentWorld.runAdminAction(btn.dataset.adminAction);
+      renderAdminConsole();
+    });
+  });
+}
+
+adminButton.addEventListener('click', () => {
+  if (!ensureAdminAccess()) return;
+  adminConsole.classList.toggle('hidden');
+  renderAdminConsole();
+});
 
 btnBack.addEventListener('click', () => {
   stopCurrentWorld();
@@ -204,6 +269,7 @@ function showMenu() {
   hudSub.textContent = 'Click a tile to begin.';
   setInstructions('Instructions', ['Choose any world tile and press Play.', 'Use Back to Menu any time to switch careers.']);
   statusPill.textContent = 'Idle';
+  if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
   // stop any world
   stopCurrentWorld();
 }
@@ -231,6 +297,7 @@ function stopCurrentWorld() {
   currentWorld = null;
   // clear canvas
   ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
 }
 
   /* ===========================
@@ -508,6 +575,31 @@ function createProGolferWorld() {
   }
   function onStop() {}
 
+  function forceWin() {
+    if (!ball) return;
+    strokes = Math.max(strokes, 1);
+    ball.x = holeX;
+    ball.y = holeY;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.onGround = true;
+    overlayText = `Admin win! Hole in ${strokes} stroke${strokes===1?'':'s'}.`;
+    showWinOverlay = true;
+    statusPill.textContent = 'Hole!';
+  }
+
+  function getAdminControls() {
+    return [
+      { id: 'force-win', label: '🏆 Auto win this hole' },
+      { id: 'reset-hole', label: '↺ Reset hole', secondary: true }
+    ];
+  }
+
+  function runAdminAction(actionId) {
+    if (actionId === 'force-win') forceWin();
+    if (actionId === 'reset-hole') resetBall();
+  }
+
   // Render/Update loop
   function loop() {
     if (!currentWorld || currentWorld.id !== 'pro') return;
@@ -556,7 +648,9 @@ function createProGolferWorld() {
     onMouseDown,
     onMouseUp,
     onResize,
-    loop
+    loop,
+    getAdminControls,
+    runAdminAction
   };
 }
 
@@ -875,6 +969,34 @@ function createDesignerWorld() {
     animationFrameId = requestAnimationFrame(loop);
   }
 
+  function getAdminControls() {
+    return [
+      { id: 'quick-layout', label: '🧱 Build quick demo layout' },
+      { id: 'instant-hole', label: '🏁 Complete hole instantly' }
+    ];
+  }
+
+  function runAdminAction(actionId) {
+    if (actionId === 'quick-layout') {
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) grid[r][c] = 0;
+      teeCell = { r: Math.floor(rows * 0.7), c: Math.floor(cols * 0.2) };
+      holeCell = { r: Math.floor(rows * 0.35), c: Math.floor(cols * 0.75) };
+      for (let c = Math.floor(cols * 0.35); c < Math.floor(cols * 0.55); c++) {
+        grid[Math.floor(rows * 0.55)][c] = 2;
+      }
+      return;
+    }
+    if (actionId === 'instant-hole') {
+      if (!holeCell || !teeCell) return;
+      if (!inPlayMode) startPlayMode();
+      ball.x = holeCell.c * cellW + cellW / 2;
+      ball.y = holeCell.r * cellH + cellH / 2;
+      ball.vx = 0;
+      ball.vy = 0;
+      ball.moving = true;
+    }
+  }
+
   return {
     id: 'designer',
     onStart,
@@ -885,7 +1007,9 @@ function createDesignerWorld() {
     onMouseDown,
     onMouseUp() {},
     onResize() {},
-    loop
+    loop,
+    getAdminControls,
+    runAdminAction
   };
 }
 
@@ -1152,6 +1276,34 @@ function createGreenskeeperWorld() {
   function onMouseUp() {}
   function onResize() {}
 
+  function getAdminControls() {
+    return [
+      { id: 'add-30s', label: '⏱️ Add 30 seconds' },
+      { id: 'set-time', label: '⏲️ Set custom timer' },
+      { id: 'water-all', label: '💧 Fully water all patches' }
+    ];
+  }
+
+  function runAdminAction(actionId) {
+    if (actionId === 'add-30s') {
+      gameTime += 30;
+      return;
+    }
+    if (actionId === 'set-time') {
+      const entered = window.prompt('Set new timer in seconds', String(Math.max(1, Math.ceil(gameTime))));
+      if (entered === null) return;
+      const next = Number(entered);
+      if (!Number.isFinite(next) || next <= 0) return;
+      gameTime = next;
+      gameOver = false;
+      return;
+    }
+    if (actionId === 'water-all') {
+      patches.forEach(patch => { patch.moisture = 1; });
+      score += 200;
+    }
+  }
+
   function loop() {
     if (!currentWorld || currentWorld.id !== 'greens') return;
     const now = performance.now();
@@ -1163,7 +1315,7 @@ function createGreenskeeperWorld() {
   }
 
   return {
-    id: 'greens', onStart, onStop, onKeyDown, onKeyUp, onMouseMove, onMouseDown, onMouseUp, onResize, loop
+    id: 'greens', onStart, onStop, onKeyDown, onKeyUp, onMouseMove, onMouseDown, onMouseUp, onResize, loop, getAdminControls, runAdminAction
   };
 }
 
@@ -1520,12 +1672,32 @@ function createCaddyWorld() {
     initGame();
   }
 
+  function getAdminControls() {
+    return [
+      { id: 'refill-stamina', label: '💪 Refill stamina' },
+      { id: 'skip-round', label: '⏭️ Skip to next round' }
+    ];
+  }
+
+  function runAdminAction(actionId) {
+    if (actionId === 'refill-stamina') {
+      caddy.stamina = 100;
+      return;
+    }
+    if (actionId === 'skip-round') {
+      showingQuestion = false;
+      startNextRound();
+    }
+  }
+
   return {
     id: "caddy",
     onStart,
     onKeyDown,
     onKeyUp,
     loop,
+    getAdminControls,
+    runAdminAction,
   };
 }
 
@@ -1655,6 +1827,29 @@ function createCaddyWorld() {
     function onKeyUp() {}
     function onResize() {}
 
+    function getAdminControls() {
+      return [
+        { id: 'max-satisfaction', label: '📈 Max satisfaction' },
+        { id: 'refill-budget', label: '💰 Refill budget' },
+        { id: 'book-event', label: '✅ Auto-book event' }
+      ];
+    }
+
+    function runAdminAction(actionId) {
+      if (actionId === 'max-satisfaction') {
+        satisfaction = 100;
+        return;
+      }
+      if (actionId === 'refill-budget') {
+        budget = 5000;
+        return;
+      }
+      if (actionId === 'book-event') {
+        booked = true;
+        overlayMsg = `Admin booked event! Final satisfaction ${satisfaction}%`;
+      }
+    }
+
     function loop() {
       if (!currentWorld || currentWorld.id !== 'manager') return;
       draw();
@@ -1668,7 +1863,7 @@ function createCaddyWorld() {
       animationFrameId = requestAnimationFrame(loop);
     }
 
-    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop };
+    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop, getAdminControls, runAdminAction };
   }
 
   /* ===========================
@@ -1698,6 +1893,7 @@ function createCaddyWorld() {
     // start-up
     resizeCanvas(); // ensure right sizes
     if (currentWorld.onStart) currentWorld.onStart();
+    if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
     // Start animation
     (function run() {
       if (!currentWorld) return;

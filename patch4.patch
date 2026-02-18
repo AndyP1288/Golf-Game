@@ -1,0 +1,798 @@
+diff --git a/scripts/app.js b/scripts/app.js
+index 3e11ce5a7fa0b75f373d257f445c846718c176dc..36589da59a2a7dc07b9387aca09ae9b2107c8074 100644
+--- a/scripts/app.js
++++ b/scripts/app.js
+@@ -39,125 +39,142 @@
+     body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+     #app-root{position:fixed;left:0;top:0;right:0;bottom:0;background:linear-gradient(180deg,var(--bg),#d2f0ea);display:flex;align-items:center;justify-content:center}
+     .panel{background:var(--panel);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12);padding:18px;max-width:1200px;width:95%;max-height:90vh;overflow:hidden;display:flex;flex-direction:row;gap:16px}
+     .menu-col{width:340px;display:flex;flex-direction:column;gap:12px}
+     .title{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
+     .subtitle{font-size:13px;color:var(--muted);margin-bottom:8px}
+     .world-tile{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,.04);transition:transform .12s ease, box-shadow .12s ease}
+     .world-tile:hover{transform:translateY(-4px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
+     .world-thumb{width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333}
+     .world-info{flex:1}
+     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+     .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+     .hud{position:absolute;left:16px;top:16px;max-width:360px;background:#ffffffd9;padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px);z-index:3}
+     .instructions{position:absolute;right:16px;top:16px;max-width:380px;max-height:42%;overflow:auto;background:#ffffffde;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,.08);z-index:3}
+     .instructions h4{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
+     .instructions ul{margin:0;padding-left:18px}
+     .instructions li{margin:2px 0;font-size:12px;color:#123}
+     .bottom-bar{position:absolute;left:16px;bottom:16px;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
+     .small{font-size:12px;color:#222}
+     .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
+     .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+     .overlay-win{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.5));color:white;font-size:20px;flex-direction:column;gap:12px}
+     .input{padding:6px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.08)}
+     .pill{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid rgba(0,0,0,.06)}
+     .muted{color:#666;font-size:12px}
++    .admin-btn{background:#2b2b2b;color:#fff;border:none;border-radius:8px;padding:8px 10px;cursor:pointer;font-size:12px}
++    .admin-console{position:absolute;right:16px;bottom:64px;width:320px;max-height:55%;overflow:auto;background:#ffffffef;border:1px solid rgba(0,0,0,.18);border-radius:10px;padding:12px;z-index:4;box-shadow:0 8px 24px rgba(0,0,0,.15)}
++    .admin-console.hidden{display:none}
++    .admin-title{font-size:14px;font-weight:700;margin:0 0 8px 0;color:#16332f}
++    .admin-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
++    .admin-action{width:100%;text-align:left;background:#0f766e;color:#fff;border:none;border-radius:8px;padding:8px;cursor:pointer;font-size:12px;margin-top:6px}
++    .admin-action.secondary{background:#475569}
++    .admin-note{font-size:11px;color:#444;margin-top:8px}
+   `;
+   document.head.appendChild(style);
+ 
+ /* =========================
+    Global Canvas & Systems
+    ========================= */
+ 
+ // Create canvas area inside panel
+ const panel = document.createElement('div');
+ panel.className = 'panel';
+ 
+ // Left column: menu / world list
+ const left = document.createElement('div');
+ left.className = 'menu-col'; // <-- scrollable now
+ left.style.overflowY = 'auto'; // Added scroll
+ 
+ const title = document.createElement('div');
+ title.className = 'title';
+ title.textContent = 'Golf Worlds — Careers on the Green';
+ 
+ const subtitle = document.createElement('div');
+ subtitle.className = 'subtitle';
+ subtitle.textContent = 'Jump into immersive mini-worlds that demonstrate 5 different golf careers. Play and learn.';
+ 
+ left.appendChild(title);
+ left.appendChild(subtitle);
+ 
++const adminButton = document.createElement('button');
++adminButton.className = 'admin-btn';
++adminButton.textContent = '🔒 Admin Console';
++left.appendChild(adminButton);
++
+ // world definitions (id, name, summary, color)
+ const worlds = [
+   { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6' },
+   { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3' },
+   { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff' },
+   { id: 'caddy', name: 'Caddy (Carrying)', summary: 'Carry gear, manage stamina, accurately place the bag and clubs under constraints.', color: '#ffd6da' },
+   { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff' }
+ ];
+ 
+ // Tile factory
+ const tiles = {};
+ worlds.forEach(w => {
+   const tile = document.createElement('div');
+   tile.className = 'world-tile';
+   tile.dataset.world = w.id;
+   tile.innerHTML = `<div class="world-thumb" style="background:linear-gradient(90deg,${w.color},#fff)">${w.name.split(' ').map(s => s[0]).join('')}</div>
+                     <div class="world-info">
+                       <div style="font-weight:600">${w.name}</div>
+                       <div class="muted">${w.summary}</div>
+                     </div>
+                     <div><button class="play-btn">Play</button></div>`;
+   left.appendChild(tile);
+   tiles[w.id] = tile;
+ });
+ 
+ // Right column: canvas + HUD
+ const right = document.createElement('div');
+ right.className = 'canvas-wrap';
+ 
+ // Canvas setup
+ const canvas = document.createElement('canvas');
+ canvas.id = 'gw-canvas';
+ canvas.style.width = '100%';
+ canvas.style.height = '100%';
+ canvas.tabIndex = 0; // to capture keys
+ right.appendChild(canvas);
+ 
+ // HUD (top-left)
+ const hud = document.createElement('div');
+ hud.className = 'hud small';
+ hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
+ right.appendChild(hud);
+ 
+ const instructionsBox = document.createElement('div');
+ instructionsBox.className = 'instructions small';
+ instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
+ right.appendChild(instructionsBox);
+ 
++const adminConsole = document.createElement('div');
++adminConsole.className = 'admin-console hidden';
++right.appendChild(adminConsole);
++
+ function setInstructions(title, items) {
+   const list = items.map(item => `<li>${item}</li>`).join('');
+   instructionsBox.innerHTML = `<h4>${title}</h4><ul>${list}</ul>`;
+ }
+ 
+ // bottom bar
+ const bottom = document.createElement('div');
+ bottom.className = 'bottom-bar small';
+ bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
+ right.appendChild(bottom);
+ 
+ panel.appendChild(left);
+ panel.appendChild(right);
+ root.appendChild(panel);
+ 
+ // Responsive canvas sizing logic
+ const ctx = canvas.getContext('2d');
+ function resizeCanvas() {
+   // physical size equals container size for crisp drawing
+   const rect = right.getBoundingClientRect();
+   canvas.width = Math.max(800, Math.floor(rect.width));
+   canvas.height = Math.max(480, Math.floor(rect.height));
+ }
+ window.addEventListener('resize', () => {
+   resizeCanvas();
+@@ -168,91 +185,141 @@ resizeCanvas();
+ 
+ // Global game state
+ let currentWorld = null;
+ let animationFrameId = null;
+ let mouse = { x: 0, y: 0, down: false };
+ canvas.addEventListener('mousemove', e => {
+   const rect = canvas.getBoundingClientRect();
+   mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+   mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+   if (currentWorld && currentWorld.onMouseMove) currentWorld.onMouseMove(mouse);
+ });
+ canvas.addEventListener('mousedown', e => { mouse.down = true; if (currentWorld && currentWorld.onMouseDown) currentWorld.onMouseDown(mouse); });
+ canvas.addEventListener('mouseup', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseUp) currentWorld.onMouseUp(mouse); });
+ canvas.addEventListener('mouseleave', e => { mouse.down = false; if (currentWorld && currentWorld.onMouseLeave) currentWorld.onMouseLeave(mouse); });
+ 
+ // Keyboard handling (space, arrows)
+ const keys = {};
+ window.addEventListener('keydown', e => { keys[e.code] = true; if (currentWorld && currentWorld.onKeyDown) currentWorld.onKeyDown(e.code); });
+ window.addEventListener('keyup', e => { keys[e.code] = false; if (currentWorld && currentWorld.onKeyUp) currentWorld.onKeyUp(e.code); });
+ 
+ // Small UI functions
+ const hudWorld = document.getElementById('hud-world');
+ const hudSub = document.getElementById('hud-sub');
+ const btnBack = document.getElementById('btn-back');
+ const statusPill = document.getElementById('status-pill');
++const ADMIN_PASSWORD = 'golf-admin-demo';
++let adminUnlocked = false;
++
++function ensureAdminAccess() {
++  if (adminUnlocked) return true;
++  const entered = window.prompt('Enter admin password');
++  if (entered === ADMIN_PASSWORD) {
++    adminUnlocked = true;
++    adminButton.textContent = '🛠️ Admin Console';
++    return true;
++  }
++  if (entered !== null) alert('Incorrect password.');
++  return false;
++}
++
++function renderAdminConsole() {
++  if (!adminUnlocked) {
++    adminConsole.innerHTML = '<p class="admin-note">Admin mode is locked.</p>';
++    return;
++  }
++
++  const worldName = currentWorld ? (worlds.find(w => w.id === currentWorld.id)?.name || currentWorld.id) : 'No world selected';
++  const controls = currentWorld && currentWorld.getAdminControls ? currentWorld.getAdminControls() : [];
++  const controlsHtml = controls.length
++    ? controls.map(control => `<button class="admin-action ${control.secondary ? 'secondary' : ''}" data-admin-action="${control.id}">${control.label}</button>`).join('')
++    : '<p class="admin-note">Start a world to see specific admin tools.</p>';
++
++  adminConsole.innerHTML = `
++    <h4 class="admin-title">Admin Console</h4>
++    <div class="admin-row"><strong>World:</strong> <span>${worldName}</span></div>
++    ${controlsHtml}
++    <p class="admin-note">Tip: change <code>ADMIN_PASSWORD</code> in <code>scripts/app.js</code> before presenting.</p>
++  `;
++
++  adminConsole.querySelectorAll('[data-admin-action]').forEach(btn => {
++    btn.addEventListener('click', () => {
++      if (!currentWorld || !currentWorld.runAdminAction) return;
++      currentWorld.runAdminAction(btn.dataset.adminAction);
++      renderAdminConsole();
++    });
++  });
++}
++
++adminButton.addEventListener('click', () => {
++  if (!ensureAdminAccess()) return;
++  adminConsole.classList.toggle('hidden');
++  renderAdminConsole();
++});
+ 
+ btnBack.addEventListener('click', () => {
+   stopCurrentWorld();
+   showMenu();
+ });
+ 
+ // Menu handlers
+ function showMenu() {
+   // highlight none
+   Object.values(tiles).forEach(t => t.style.opacity = '1');
+   hudWorld.textContent = 'Select a world';
+   hudSub.textContent = 'Click a tile to begin.';
+   setInstructions('Instructions', ['Choose any world tile and press Play.', 'Use Back to Menu any time to switch careers.']);
+   statusPill.textContent = 'Idle';
++  if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
+   // stop any world
+   stopCurrentWorld();
+ }
+ 
+ Object.values(tiles).forEach(tile => {
+   tile.addEventListener('click', () => {
+     const w = tile.dataset.world;
+     startWorld(w);
+   });
+   const btn = tile.querySelector('button.play-btn');
+   btn.addEventListener('click', (ev) => {
+     ev.stopPropagation();
+     const w = tile.dataset.world;
+     startWorld(w);
+   });
+ });
+ 
+ // Stopping current world (cleanup)
+ function stopCurrentWorld() {
+   if (animationFrameId) {
+     cancelAnimationFrame(animationFrameId);
+     animationFrameId = null;
+   }
+   if (currentWorld && currentWorld.onStop) currentWorld.onStop();
+   currentWorld = null;
+   // clear canvas
+   ctx.clearRect(0,0,canvas.width,canvas.height);
++  if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
+ }
+ 
+   /* ===========================
+      Shared drawing utilities
+      =========================== */
+   function drawRoundedRect(ctx, x, y, w, h, r) {
+     ctx.beginPath();
+     ctx.moveTo(x + r, y);
+     ctx.arcTo(x + w, y, x + w, y + h, r);
+     ctx.arcTo(x + w, y + h, x, y + h, r);
+     ctx.arcTo(x, y + h, x, y, r);
+     ctx.arcTo(x, y, x + w, y, r);
+     ctx.closePath();
+     ctx.fill();
+   }
+ 
+   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+ 
+ /* ===========================
+      World: Pro Golfer (realistic 2D)
+      =========================== */
+ function createProGolferWorld() {
+   // Configuration
+   const groundH = Math.floor(canvas.height * 0.20);
+@@ -486,99 +553,126 @@ function createProGolferWorld() {
+       ball.onGround = false;
+       strokes += 1;
+       statusPill.textContent = `Strokes ${strokes}/${par}`;
+       if (strokes > par) {
+         overlayText = 'Par exceeded. Resetting...';
+         showWinOverlay = true;
+       }
+     }
+   }
+ 
+   function onResize() {}
+   function onStart() {
+     hudWorld.textContent = 'Pro Golfer';
+     hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
+     setInstructions('Pro Golfer Controls', [
+       'Space (hold/release): charge and shoot',
+       'Arrow Up / Down: adjust launch angle',
+       'Mouse drag: aim direction',
+       'Click + hold near ball: charge shot with mouse'
+     ]);
+     statusPill.textContent = `Par ${par} • Strokes ${strokes}/${par}`;
+     windStrength = (Math.random() * 1.6 - 0.8);
+   }
+   function onStop() {}
+ 
++  function forceWin() {
++    if (!ball) return;
++    strokes = Math.max(strokes, 1);
++    ball.x = holeX;
++    ball.y = holeY;
++    ball.vx = 0;
++    ball.vy = 0;
++    ball.onGround = true;
++    overlayText = `Admin win! Hole in ${strokes} stroke${strokes===1?'':'s'}.`;
++    showWinOverlay = true;
++    statusPill.textContent = 'Hole!';
++  }
++
++  function getAdminControls() {
++    return [
++      { id: 'force-win', label: '🏆 Auto win this hole' },
++      { id: 'reset-hole', label: '↺ Reset hole', secondary: true }
++    ];
++  }
++
++  function runAdminAction(actionId) {
++    if (actionId === 'force-win') forceWin();
++    if (actionId === 'reset-hole') resetBall();
++  }
++
+   // Render/Update loop
+   function loop() {
+     if (!currentWorld || currentWorld.id !== 'pro') return;
+ 
+     if (charging && ball.onGround) {
+       power += 1.6;
+       if (power > 100) power = 100;
+     }
+ 
+     physicsStep();
+     if (ball) checkHoleIn();
+     drawScene();
+ 
+     // overlay with Play Again & Menu
+     if (showWinOverlay) {
+       ctx.fillStyle = 'rgba(0,0,0,0.32)';
+       ctx.fillRect(0, 0, canvas.width, canvas.height);
+ 
+       ctx.fillStyle = '#fff';
+       ctx.font = 'bold 28px Inter';
+       ctx.textAlign = 'center';
+       ctx.fillText(overlayText, canvas.width/2, canvas.height/2 - 20);
+ 
+ 
+       // Play Again & Menu buttons (center)
+       const playBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 8, w: 160, h: 40 };
+       const menuBtn = { x: canvas.width/2 - 80, y: canvas.height/2 + 56, w: 160, h: 40 };
+       ctx.fillStyle = '#fff';
+       ctx.fillRect(playBtn.x, playBtn.y, playBtn.w, playBtn.h);
+       ctx.fillRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h);
+       ctx.fillStyle = '#003b2e';
+       ctx.fillText('Play Again', canvas.width/2, canvas.height/2 + 36);
+       ctx.fillText('Back to Menu', canvas.width/2, canvas.height/2 + 84);
+     }
+ 
+     animationFrameId = requestAnimationFrame(loop);
+   }
+ 
+   return {
+     id: 'pro',
+     onStart,
+     onStop,
+     onKeyDown,
+     onKeyUp,
+     onMouseMove,
+     onMouseDown,
+     onMouseUp,
+     onResize,
+-    loop
++    loop,
++    getAdminControls,
++    runAdminAction
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ /* ===========================
+    World: Course Designer + Play Mode
+ =========================== */
+ function createDesignerWorld() {
+   const cols = 80;
+   const rows = Math.round((canvas.height / canvas.width) * cols);
+   const cellW = canvas.width / cols;
+   const cellH = canvas.height / rows;
+   const grid = new Array(rows).fill(null).map(() => new Array(cols).fill(0)); // default grass
+ 
+   let brush = 'sand';
+   let placingHole = false;
+   let placingTee = false;
+   let holeCell = null;
+@@ -853,61 +947,91 @@ function createDesignerWorld() {
+     if (Math.abs(ball.vx) < 0.1 && Math.abs(ball.vy) < 0.1) {
+       ball.moving = false;
+       ball.vx = 0;
+       ball.vy = 0;
+     }
+ 
+     const dx = ball.x - (holeCell.c * cellW + cellW / 2);
+     const dy = ball.y - (holeCell.r * cellH + cellH / 2);
+     if (Math.sqrt(dx * dx + dy * dy) < Math.min(cellW, cellH) * 0.36) {
+       alert(`Hole completed in ${strokes} strokes!`);
+       inPlayMode = false;
+       onStart();
+     }
+   }
+ 
+   function loop() {
+     if (!currentWorld || currentWorld.id !== 'designer') return;
+     if (inPlayMode) {
+       if (powerCharging) power = Math.min(power + 2, 200);
+       updatePlay();
+       drawPlayMode();
+     } else drawDesigner();
+     animationFrameId = requestAnimationFrame(loop);
+   }
+ 
++  function getAdminControls() {
++    return [
++      { id: 'quick-layout', label: '🧱 Build quick demo layout' },
++      { id: 'instant-hole', label: '🏁 Complete hole instantly' }
++    ];
++  }
++
++  function runAdminAction(actionId) {
++    if (actionId === 'quick-layout') {
++      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) grid[r][c] = 0;
++      teeCell = { r: Math.floor(rows * 0.7), c: Math.floor(cols * 0.2) };
++      holeCell = { r: Math.floor(rows * 0.35), c: Math.floor(cols * 0.75) };
++      for (let c = Math.floor(cols * 0.35); c < Math.floor(cols * 0.55); c++) {
++        grid[Math.floor(rows * 0.55)][c] = 2;
++      }
++      return;
++    }
++    if (actionId === 'instant-hole') {
++      if (!holeCell || !teeCell) return;
++      if (!inPlayMode) startPlayMode();
++      ball.x = holeCell.c * cellW + cellW / 2;
++      ball.y = holeCell.r * cellH + cellH / 2;
++      ball.vx = 0;
++      ball.vy = 0;
++      ball.moving = true;
++    }
++  }
++
+   return {
+     id: 'designer',
+     onStart,
+     onStop() {},
+     onKeyDown,
+     onKeyUp,
+     onMouseMove,
+     onMouseDown,
+     onMouseUp() {},
+     onResize() {},
+-    loop
++    loop,
++    getAdminControls,
++    runAdminAction
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+@@ -1130,62 +1254,90 @@ function createGreenskeeperWorld() {
+       if (!p) return;
+       p.moisture = 1;
+       score += 20; // more points
+       tasksDone++;
+ 
+       if (tasksDone % SPRINKLER_UNLOCK === 0) {
+         sprinklerActive = true;
+         sprinklerTimer = SPRINKLER_DURATION;
+       }
+     }
+ 
+     splashes.push({ x: m.x, y: m.y, alpha: 0.8, size: 4 });
+   }
+ 
+   function onMouseMove(m) {
+     mousePos = { x: m.x, y: m.y };
+   }
+ 
+   function onStart() { init(); }
+   function onStop() {}
+   function onKeyDown() {}
+   function onKeyUp() {}
+   function onMouseUp() {}
+   function onResize() {}
+ 
++  function getAdminControls() {
++    return [
++      { id: 'add-30s', label: '⏱️ Add 30 seconds' },
++      { id: 'set-time', label: '⏲️ Set custom timer' },
++      { id: 'water-all', label: '💧 Fully water all patches' }
++    ];
++  }
++
++  function runAdminAction(actionId) {
++    if (actionId === 'add-30s') {
++      gameTime += 30;
++      return;
++    }
++    if (actionId === 'set-time') {
++      const entered = window.prompt('Set new timer in seconds', String(Math.max(1, Math.ceil(gameTime))));
++      if (entered === null) return;
++      const next = Number(entered);
++      if (!Number.isFinite(next) || next <= 0) return;
++      gameTime = next;
++      gameOver = false;
++      return;
++    }
++    if (actionId === 'water-all') {
++      patches.forEach(patch => { patch.moisture = 1; });
++      score += 200;
++    }
++  }
++
+   function loop() {
+     if (!currentWorld || currentWorld.id !== 'greens') return;
+     const now = performance.now();
+     const dt = now - lastTick;
+     lastTick = now;
+     update(dt);
+     draw();
+     if (!gameOver) animationFrameId = requestAnimationFrame(loop);
+   }
+ 
+   return {
+-    id: 'greens', onStart, onStop, onKeyDown, onKeyUp, onMouseMove, onMouseDown, onMouseUp, onResize, loop
++    id: 'greens', onStart, onStop, onKeyDown, onKeyUp, onMouseMove, onMouseDown, onMouseUp, onResize, loop, getAdminControls, runAdminAction
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ /* ===========================
+      World: Multi-Round Caddy Challenge (Game Over Added)
+      =========================== */
+ function createCaddyWorld() {
+   const caddy = { x: 60, y: 0, vx: 0, vy: 0, speed: 2.2, stamina: 100 };
+   let bags = [];
+   let traps = [];
+   let golfers = [];
+   let score = 0;
+   let started = false;
+   let showingQuestion = false;
+   let currentQuestion = null;
+@@ -1498,56 +1650,76 @@ function createCaddyWorld() {
+ 
+   function onKeyDown(code) {
+     if (showingQuestion) return;
+     if (code === "ArrowRight") caddy.vx = caddy.speed;
+     if (code === "ArrowLeft") caddy.vx = -caddy.speed;
+     if (code === "ArrowUp") caddy.vy = -caddy.speed;
+     if (code === "ArrowDown") caddy.vy = caddy.speed;
+   }
+ 
+   function onKeyUp(code) {
+     if (code === "ArrowRight" || code === "ArrowLeft") caddy.vx = 0;
+     if (code === "ArrowUp" || code === "ArrowDown") caddy.vy = 0;
+   }
+ 
+   function loop() {
+     if (!currentWorld || currentWorld.id !== "caddy") return;
+     update(16);
+     draw();
+     animationFrameId = requestAnimationFrame(loop);
+   }
+ 
+   function onStart() {
+     initGame();
+   }
+ 
++  function getAdminControls() {
++    return [
++      { id: 'refill-stamina', label: '💪 Refill stamina' },
++      { id: 'skip-round', label: '⏭️ Skip to next round' }
++    ];
++  }
++
++  function runAdminAction(actionId) {
++    if (actionId === 'refill-stamina') {
++      caddy.stamina = 100;
++      return;
++    }
++    if (actionId === 'skip-round') {
++      showingQuestion = false;
++      startNextRound();
++    }
++  }
++
+   return {
+     id: "caddy",
+     onStart,
+     onKeyDown,
+     onKeyUp,
+     loop,
++    getAdminControls,
++    runAdminAction,
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   /* ===========================
+      World: Club Manager (event logistics micro-game)
+      =========================== */
+   function createManagerWorld() {
+     // Simple event scheduling & budget allocation puzzle
+     let budget = 2000;
+     const players = 120;
+@@ -1633,93 +1805,117 @@ function createCaddyWorld() {
+       }
+     }
+ 
+     function onStart() {
+       hudWorld.textContent = 'Club Manager';
+       hudSub.textContent = 'Allocate budget across items and book your event. Click options to toggle.';
+       setInstructions('Club Manager Controls', [
+         'Click an option card to toggle it on/off',
+         'Chosen options reduce budget and increase satisfaction',
+         'Book Event button finalizes your current plan',
+         'Balance spending so satisfaction stays high'
+       ]);
+       statusPill.textContent = 'Manager mode';
+       budget = 2000; satisfaction = 40;
+       items.forEach(it => it.chosen=false);
+       booked=false;
+     }
+ 
+     function onStop() {}
+     function onMouseMove() {}
+     function onMouseUp() {}
+     function onKeyDown() {}
+     function onKeyUp() {}
+     function onResize() {}
+ 
++    function getAdminControls() {
++      return [
++        { id: 'max-satisfaction', label: '📈 Max satisfaction' },
++        { id: 'refill-budget', label: '💰 Refill budget' },
++        { id: 'book-event', label: '✅ Auto-book event' }
++      ];
++    }
++
++    function runAdminAction(actionId) {
++      if (actionId === 'max-satisfaction') {
++        satisfaction = 100;
++        return;
++      }
++      if (actionId === 'refill-budget') {
++        budget = 5000;
++        return;
++      }
++      if (actionId === 'book-event') {
++        booked = true;
++        overlayMsg = `Admin booked event! Final satisfaction ${satisfaction}%`;
++      }
++    }
++
+     function loop() {
+       if (!currentWorld || currentWorld.id !== 'manager') return;
+       draw();
+       if (overlayMsg) {
+         ctx.fillStyle = 'rgba(0,0,0,0.4)';
+         ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+         ctx.fillStyle = '#fff';
+         ctx.font = '18px Inter';
+         ctx.fillText(overlayMsg, canvas.width/2, canvas.height - 40);
+       }
+       animationFrameId = requestAnimationFrame(loop);
+     }
+ 
+-    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop };
++    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop, getAdminControls, runAdminAction };
+   }
+ 
+   /* ===========================
+      World dispatching & startup
+      =========================== */
+ 
+   // world instances cached
+   const worldConstructors = {
+     'pro': createProGolferWorld,
+     'designer': createDesignerWorld,
+     'greens': createGreenskeeperWorld,
+     'caddy': createCaddyWorld,
+     'manager': createManagerWorld
+   };
+ 
+   function startWorld(id) {
+     if (!worldConstructors[id]) {
+       console.warn('No constructor for', id);
+       return;
+     }
+     statusPill.textContent = 'Loading...';
+     stopCurrentWorld();
+     // create new instance
+     const world = worldConstructors[id]();
+     currentWorld = world;
+     currentWorld.id = id;
+     // start-up
+     resizeCanvas(); // ensure right sizes
+     if (currentWorld.onStart) currentWorld.onStart();
++    if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
+     // Start animation
+     (function run() {
+       if (!currentWorld) return;
+       if (currentWorld.loop) currentWorld.loop();
+       else animationFrameId = requestAnimationFrame(run);
+     })();
+   }
+ 
+   // Hook keyboard onto canvas focus
+   canvas.addEventListener('focus', () => { /* nothing */ });
+ 
+   // Initialize: show menu
+   showMenu();
+ 
+   // Expose a quick debugging API to window for testing
+   window.GolfWorlds = {
+     startWorld,
+     stopCurrentWorld,
+     showMenu,
+     canvas,
+     ctx
+   };
+ 
+   // Auto-focus canvas for keys
+   setTimeout(()=>{ try{ canvas.focus(); }catch(e){} }, 200);
