@@ -44,7 +44,9 @@
     .subtitle{font-size:13px;color:var(--muted);margin-bottom:8px}
     .world-tile{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,.04);transition:transform .12s ease, box-shadow .12s ease}
     .world-tile:hover{transform:translateY(-4px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
-    .world-thumb{width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333}
+    .world-thumb{position:relative;width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333;overflow:hidden}
+    .world-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    .world-thumb .fallback{position:relative;z-index:1}
     .world-info{flex:1}
     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
     .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
@@ -101,13 +103,13 @@ adminButton.className = 'admin-btn';
 adminButton.textContent = '🔒 Admin Console';
 left.appendChild(adminButton);
 
-// world definitions (id, name, summary, color)
+// world definitions (id, name, summary, color, image)
 const worlds = [
-  { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6' },
-  { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3' },
-  { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff' },
-  { id: 'caddy', name: 'Caddy Dash', summary: 'Run nonstop and jump obstacles while delivering clubs to golfers down the fairway.', color: '#ffd6da' },
-  { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff' }
+  { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6', image: 'Assets/images/progolfer.png' },
+  { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3', image: 'Assets/images/coursedesigner.png' },
+  { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff', image: 'Assets/images/greenskeeper.png' },
+  { id: 'caddy', name: 'Caddy Dash', summary: 'Run nonstop and jump obstacles while delivering clubs to golfers down the fairway.', color: '#ffd6da', image: 'Assets/images/caddy.png' },
+  { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff', image: 'Assets/images/clubmanager.png' }
 ];
 
 // Tile factory
@@ -116,7 +118,10 @@ worlds.forEach(w => {
   const tile = document.createElement('div');
   tile.className = 'world-tile';
   tile.dataset.world = w.id;
-  tile.innerHTML = `<div class="world-thumb" style="background:linear-gradient(90deg,${w.color},#fff)">${w.name.split(' ').map(s => s[0]).join('')}</div>
+  tile.innerHTML = `<div class="world-thumb" style="background:linear-gradient(90deg,${w.color},#fff)">
+                      <img src="${w.image}" alt="${w.name}" loading="lazy" onload="this.nextElementSibling.style.display='none'" onerror="this.remove()">
+                      <span class="fallback">${w.name.split(' ').map(s => s[0]).join('')}</span>
+                    </div>
                     <div class="world-info">
                       <div style="font-weight:600">${w.name}</div>
                       <div class="muted">${w.summary}</div>
