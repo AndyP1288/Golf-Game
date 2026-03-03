@@ -4,7 +4,7 @@
      1) Pro Golfer World - realistic timing/angle/power + follow-through + par/strokes
      2) Greenskeeper World - timed "water patches" drying mechanic & repair tasks
      3) Course Designer World - paintbrush tool to paint sand, water, grass, green
-     4) Caddy / Carrying World - move golf bags between points with physics & stamina
+    4) Caddy Dash World - endless runner inspired by the offline dino game
      5) Club Manager World - manage event logistics, schedule, budget mini-game
    Features:
      - Main menu with clickable world thumbnails
@@ -106,7 +106,7 @@ const worlds = [
   { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6' },
   { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3' },
   { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff' },
-  { id: 'caddy', name: 'Caddy (Carrying)', summary: 'Carry gear, manage stamina, accurately place the bag and clubs under constraints.', color: '#ffd6da' },
+  { id: 'caddy', name: 'Caddy Dash', summary: 'Run nonstop and jump obstacles while delivering clubs to golfers down the fairway.', color: '#ffd6da' },
   { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff' }
 ];
 
@@ -1329,369 +1329,262 @@ function createGreenskeeperWorld() {
 
 
 /* ===========================
-     World: Multi-Round Caddy Challenge (Game Over Added)
+     World: Caddy Dash (dino-style endless runner)
      =========================== */
 function createCaddyWorld() {
-  const caddy = { x: 60, y: 0, vx: 0, vy: 0, speed: 2.2, stamina: 100 };
-  let bags = [];
-  let traps = [];
-  let golfers = [];
-  let score = 0;
-  let started = false;
-  let showingQuestion = false;
-  let currentQuestion = null;
-  let selected = null;
-  let questionAnswered = false;
-  let round = 1;
-  let roundMessage = "";
-  let roundMessageAlpha = 0;
-  let fadingIn = false;
+  const gravity = 0.9;
+  const jumpVelocity = -16;
+  const groundHeight = 110;
+  const deliveryDistance = 300;
+
+  const caddy = { x: 130, y: 0, w: 34, h: 52, vy: 0, onGround: true };
+  let groundY = 0;
+  let obstacles = [];
+  let distance = 0;
+  let deliveries = 0;
+  let nextDeliveryAt = deliveryDistance;
+  let obstacleSpawnTimer = 0;
+  let obstacleSpawnEvery = 1200;
+  let gameOver = false;
+  let gameOverMessage = '';
+  let lastTick = 0;
   let animationFrameId;
+  let invincible = false;
+  let deliveryFlashMs = 0;
 
-  const questions = [
-    {
-      q: "Ball is in a bunker near the green. What club do you use?",
-      options: ["Driver", "Sand Wedge", "Putter"],
-      answer: 1,
-    },
-    {
-      q: "You’re 150 yards from the hole on the fairway. What do you use?",
-      options: ["7 Iron", "Putter", "Wedge"],
-      answer: 0,
-    },
-    {
-      q: "You’re on the green, 20 feet from the hole. What club?",
-      options: ["Putter", "9 Iron", "Driver"],
-      answer: 0,
-    },
-    {
-      q: "Ball stuck in rough grass, close to green. What should you use?",
-      options: ["Pitching Wedge", "Driver", "Putter"],
-      answer: 0,
-    },
-    {
-      q: "You’re teeing off on a long par 5. What club do you start with?",
-      options: ["Driver", "9 Iron", "Putter"],
-      answer: 0,
-    },
-  ];
-
-  function initGame() {
-    traps = [];
-    bags = [];
-    golfers = [];
-
-    const trapCount = Math.min(3 + round, 10);
-    const bagCount = 2 + Math.floor(round / 2);
-    const courseLength = canvas.width * (0.4 + round * 0.1);
-
-    caddy.x = 60;
-    caddy.y = canvas.height - 140;
-    caddy.stamina = 100;
-    caddy.vx = 0;
+  function resetGame() {
+    groundY = canvas.height - groundHeight;
+    obstacles = [];
+    distance = 0;
+    deliveries = 0;
+    nextDeliveryAt = deliveryDistance;
+    obstacleSpawnTimer = 0;
+    obstacleSpawnEvery = 1000;
+    gameOver = false;
+    gameOverMessage = '';
+    caddy.y = groundY - caddy.h;
     caddy.vy = 0;
-
-    // Generate traps
-    for (let i = 0; i < trapCount; i++) {
-      traps.push({
-        x: 150 + Math.random() * (courseLength - 200),
-        y: canvas.height - 160 + Math.random() * 20,
-        r: 12 + Math.random() * 4,
-      });
-    }
-
-    // Generate bags (not overlapping traps)
-    for (let i = 0; i < bagCount; i++) {
-      let x, y, valid = false;
-      while (!valid) {
-        x = 120 + Math.random() * (courseLength - 150);
-        y = canvas.height - 140;
-        valid = !traps.some((t) => Math.hypot(x - t.x, y - t.y) < t.r + 20);
-      }
-      bags.push({ x, y, carried: false, delivered: false });
-    }
-
-    // Golfer target
-    golfers.push({
-      x: courseLength,
-      y: canvas.height - 150,
-      reached: false,
-    });
-
-    started = true;
-    hudWorld.textContent = "Caddy Challenge";
-    hudSub.textContent = `Round ${round}: Carry all bags to the golfer without hitting traps.`;
-    setInstructions('Caddy Controls', [
-      'Arrow keys: move the caddy',
-      'Touch bags to pick them up',
-      'Avoid red trap circles',
-      'Deliver to golfer, then answer the golf situation question'
-    ]);
-    statusPill.textContent = `Round ${round}`;
+    caddy.onGround = true;
+    deliveryFlashMs = 0;
+    lastTick = 0;
   }
 
-  function update(dt) {
-    if (!started || showingQuestion) return;
+  function spawnObstacle(speed) {
+    const tall = Math.random() > 0.45;
+    const kind = Math.random() > 0.5 ? 'cone' : 'sprinkler';
+    const obstacle = {
+      x: canvas.width + 30,
+      w: tall ? 24 : 42,
+      h: tall ? 54 : 30,
+      y: groundY,
+      passed: false,
+      kind,
+      speedBoost: Math.random() * 1.4
+    };
+    obstacleSpawnEvery = clamp(1100 - speed * 45, 500, 1100);
+    obstacles.push(obstacle);
+  }
 
-    caddy.x += caddy.vx;
-    caddy.y += caddy.vy;
-    caddy.x = clamp(caddy.x, 16, canvas.width - 16);
-    caddy.y = clamp(caddy.y, 50, canvas.height - 50);
+  function collide(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y && a.y + a.h > b.y - b.h;
+  }
 
-    // stamina logic
-    if (caddy.vx === 0 && caddy.vy === 0) {
-      caddy.stamina += 0.05 * dt;
-      if (caddy.stamina > 100) caddy.stamina = 100;
+  function endRun(message) {
+    gameOver = true;
+    gameOverMessage = message;
+    statusPill.textContent = 'Run ended';
+  }
+
+  function update(dtMs) {
+    if (gameOver) return;
+    const dt = dtMs / 16.67;
+    const speed = 6.8 + distance / 1200;
+    distance += speed * dt;
+
+    caddy.vy += gravity * dt;
+    caddy.y += caddy.vy * dt;
+    if (caddy.y >= groundY - caddy.h) {
+      caddy.y = groundY - caddy.h;
+      caddy.vy = 0;
+      caddy.onGround = true;
     }
 
-    bags.forEach((bag) => {
-      if (!bag.carried && !bag.delivered && Math.hypot(caddy.x - bag.x, caddy.y - bag.y) < 20) {
-        bag.carried = true;
-        statusPill.textContent = "Picked up bag!";
-      }
-      if (bag.carried) {
-        bag.x = caddy.x + 10;
-        bag.y = caddy.y;
-        caddy.stamina -= 0.02 * dt * (1 + (round - 1) * 0.2);
-        if (caddy.stamina <= 0) {
-          caddy.stamina = 0;
-          gameOverScreen("You collapsed from exhaustion!");
-        }
-      }
-    });
+    obstacleSpawnTimer += dtMs;
+    if (obstacleSpawnTimer >= obstacleSpawnEvery) {
+      obstacleSpawnTimer = 0;
+      spawnObstacle(speed);
+    }
 
-    traps.forEach((t) => {
-      if (Math.hypot(caddy.x - t.x, caddy.y - t.y) < t.r + 10) {
-        gameOverScreen("You got caught in a trap! Game Over.");
-      }
+    obstacles.forEach(o => {
+      o.x -= (speed + o.speedBoost) * 2.2 * dt;
     });
+    obstacles = obstacles.filter(o => o.x + o.w > -20);
 
-    golfers.forEach((g) => {
-      if (!g.reached && Math.hypot(caddy.x - g.x, caddy.y - g.y) < 30) {
-        g.reached = true;
-        startQuestionRound();
+    for (const obstacle of obstacles) {
+      if (!obstacle.passed && obstacle.x + obstacle.w < caddy.x) obstacle.passed = true;
+      if (!invincible && collide(caddy, obstacle)) {
+        endRun('You clipped an obstacle and dropped the clubs!');
+        break;
       }
-    });
+    }
+
+    if (distance >= nextDeliveryAt) {
+      deliveries += 1;
+      nextDeliveryAt += deliveryDistance;
+      deliveryFlashMs = 850;
+      statusPill.textContent = `Delivery #${deliveries}`;
+    } else {
+      statusPill.textContent = gameOver ? 'Run ended' : `Distance ${Math.floor(distance)}y`;
+    }
+
+    if (deliveryFlashMs > 0) deliveryFlashMs -= dtMs;
   }
 
   function draw() {
-    ctx.fillStyle = "#cfeee6";
+    const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+    sky.addColorStop(0, '#eaf4ff');
+    sky.addColorStop(1, '#cfe9ff');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#3a7e52";
-    ctx.fillRect(0, canvas.height - 150, canvas.width, 150);
 
-    // traps
-    traps.forEach((t) => {
-      ctx.fillStyle = "#a33";
+    ctx.fillStyle = '#99cf82';
+    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+    ctx.fillStyle = '#5e8d4a';
+    ctx.fillRect(0, groundY + 8, canvas.width, 3);
+
+    const stripeOffset = -(distance * 3 % 42);
+    ctx.strokeStyle = '#8ebe72';
+    ctx.lineWidth = 2;
+    for (let x = stripeOffset; x < canvas.width; x += 42) {
       ctx.beginPath();
-      ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
-      ctx.fill();
-    });
+      ctx.moveTo(x, groundY + 24);
+      ctx.lineTo(x + 24, groundY + 24);
+      ctx.stroke();
+    }
 
-    // bags
-    ctx.fillStyle = "#b5651d";
-    bags.forEach((b) => {
-      if (!b.delivered) ctx.fillRect(b.x - 8, b.y - 8, 16, 16);
-    });
-
-    // golfers
-    ctx.fillStyle = "#ffd54f";
-    golfers.forEach((g) => {
-      ctx.beginPath();
-      ctx.arc(g.x, g.y, 20, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // caddy
-    ctx.fillStyle = "#fff";
-    ctx.beginPath();
-    ctx.arc(caddy.x, caddy.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-
-    // stamina bar (top-right)
-    ctx.fillStyle = "#0008";
-    drawRoundedRect(ctx, canvas.width - 160, 20, 140, 12, 6);
-    ctx.fillStyle = "#ff7043";
-    drawRoundedRect(ctx, canvas.width - 159, 21, (caddy.stamina / 100) * 138, 10, 6);
-
-    if (roundMessageAlpha > 0) drawRoundMessage();
-
-    if (showingQuestion) drawQuestion();
-  }
-
-  function drawQuestion() {
-    const q = currentQuestion;
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.font = "22px Inter";
-    ctx.textAlign = "center";
-    ctx.fillText("Golf Situation!", canvas.width / 2, canvas.height / 2 - 80);
-    ctx.fillText(q.q, canvas.width / 2, canvas.height / 2 - 40);
-
-    q.options.forEach((opt, i) => {
-      const y = canvas.height / 2 + i * 45;
-      let fillColor = "#fff";
-      if (questionAnswered) {
-        if (i === q.answer) fillColor = "#4caf50";
-        else if (selected === i && i !== q.answer) fillColor = "#f44336";
+    obstacles.forEach(o => {
+      if (o.kind === 'cone') {
+        ctx.fillStyle = '#ff7043';
+        ctx.beginPath();
+        ctx.moveTo(o.x + o.w / 2, o.y - o.h);
+        ctx.lineTo(o.x + o.w, o.y);
+        ctx.lineTo(o.x, o.y);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#7b8fa5';
+        drawRoundedRect(ctx, o.x, o.y - o.h, o.w, o.h, 6);
+        ctx.fillStyle = '#a3b4c8';
+        drawRoundedRect(ctx, o.x + 6, o.y - o.h + 6, o.w - 12, 8, 4);
       }
-      drawRoundedRect(ctx, canvas.width / 2 - 90, y, 180, 35, 10);
-      ctx.fillStyle = "#000";
-      ctx.fillText(`${i + 1}. ${opt}`, canvas.width / 2, y + 24);
     });
 
-    if (questionAnswered) {
-      ctx.fillStyle = "#fff";
-      ctx.font = "18px Inter";
-      ctx.fillText(
-        selected === q.answer ? "Correct!" : "Incorrect! Game Over.",
-        canvas.width / 2,
-        canvas.height / 2 + 160
-      );
+    ctx.fillStyle = '#1f2937';
+    drawRoundedRect(ctx, caddy.x, caddy.y, caddy.w, caddy.h, 8);
+    ctx.fillStyle = '#f6c89b';
+    drawRoundedRect(ctx, caddy.x + 8, caddy.y + 5, 18, 16, 4);
+    ctx.fillStyle = '#7d4f2a';
+    drawRoundedRect(ctx, caddy.x + caddy.w - 10, caddy.y + 18, 16, 28, 4);
+
+    ctx.fillStyle = '#1e3a8a';
+    ctx.font = 'bold 22px Inter';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Distance: ${Math.floor(distance)} yds`, 24, 44);
+    ctx.fillText(`Clubs Delivered: ${deliveries}`, 24, 74);
+
+    if (deliveryFlashMs > 0) {
+      ctx.fillStyle = 'rgba(17, 94, 89, 0.88)';
+      drawRoundedRect(ctx, canvas.width / 2 - 160, 36, 320, 48, 12);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText('Club delivery completed!', canvas.width / 2, 67);
+    }
+
+    if (gameOver) {
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 34px Inter';
+      ctx.fillText('Run Over', canvas.width / 2, canvas.height / 2 - 26);
+      ctx.font = '19px Inter';
+      ctx.fillText(gameOverMessage, canvas.width / 2, canvas.height / 2 + 8);
+      ctx.fillText('Press Space or R to restart', canvas.width / 2, canvas.height / 2 + 42);
     }
   }
 
-  function startQuestionRound() {
-    showingQuestion = true;
-    selected = null;
-    questionAnswered = false;
-    currentQuestion = questions[Math.floor(Math.random() * questions.length)];
-  }
-
-  canvas.addEventListener("click", (e) => {
-    if (!showingQuestion || questionAnswered) return;
-    const q = currentQuestion;
-    const startY = canvas.height / 2;
-    q.options.forEach((opt, i) => {
-      const y = startY + i * 45;
-      if (
-        e.offsetX > canvas.width / 2 - 90 &&
-        e.offsetX < canvas.width / 2 + 90 &&
-        e.offsetY > y &&
-        e.offsetY < y + 35
-      ) {
-        selected = i;
-        questionAnswered = true;
-
-        if (selected === q.answer) {
-          setTimeout(() => {
-            showingQuestion = false;
-            startNextRound();
-          }, 1000);
-        } else {
-          setTimeout(() => {
-            gameOverScreen("Incorrect! Game Over.");
-          }, 800);
-        }
-      }
-    });
-  });
-
-  function startNextRound() {
-    round++;
-    fadeInRoundMessage(`Round ${round}`);
-    initGame();
-  }
-
-  function fadeInRoundMessage(msg) {
-    roundMessage = msg;
-    roundMessageAlpha = 0;
-    fadingIn = true;
-  }
-
-  function drawRoundMessage() {
-    if (fadingIn) {
-      roundMessageAlpha += 0.02;
-      if (roundMessageAlpha >= 1) {
-        roundMessageAlpha = 1;
-        setTimeout(() => (fadingIn = false), 1000);
-      }
-    }
-    if (roundMessageAlpha > 0) {
-      ctx.globalAlpha = roundMessageAlpha;
-      ctx.fillStyle = "#fff";
-      ctx.font = "28px Inter";
-      ctx.textAlign = "center";
-      ctx.fillText(roundMessage, canvas.width / 2, canvas.height / 2);
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  function gameOverScreen(message) {
-    showingQuestion = false;
-    selected = null;
-    questionAnswered = false;
-
-    ctx.fillStyle = "rgba(0,0,0,0.7)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.font = "30px Inter";
-    ctx.textAlign = "center";
-    ctx.fillText(message, canvas.width / 2, canvas.height / 2);
-    ctx.font = "18px Inter";
-    ctx.fillText("Click to Restart", canvas.width / 2, canvas.height / 2 + 40);
-
-    canvas.addEventListener(
-      "click",
-      function restartHandler() {
-        canvas.removeEventListener("click", restartHandler);
-        resetGame();
-      },
-      { once: true }
-    );
-  }
-
-  function resetGame() {
-    round = 1;
-    initGame();
-  }
-
-  function onKeyDown(code) {
-    if (showingQuestion) return;
-    if (code === "ArrowRight") caddy.vx = caddy.speed;
-    if (code === "ArrowLeft") caddy.vx = -caddy.speed;
-    if (code === "ArrowUp") caddy.vy = -caddy.speed;
-    if (code === "ArrowDown") caddy.vy = caddy.speed;
-  }
-
-  function onKeyUp(code) {
-    if (code === "ArrowRight" || code === "ArrowLeft") caddy.vx = 0;
-    if (code === "ArrowUp" || code === "ArrowDown") caddy.vy = 0;
-  }
-
-  function loop() {
-    if (!currentWorld || currentWorld.id !== "caddy") return;
-    update(16);
-    draw();
-    animationFrameId = requestAnimationFrame(loop);
+  function jump() {
+    if (!caddy.onGround || gameOver) return;
+    caddy.vy = jumpVelocity;
+    caddy.onGround = false;
   }
 
   function onStart() {
-    initGame();
+    resetGame();
+    hudWorld.textContent = 'Caddy Dash';
+    hudSub.textContent = 'Dino-style runner: jump obstacles and keep delivering clubs.';
+    setInstructions('Caddy Dash Controls', [
+      'Space / Arrow Up: jump over on-course obstacles',
+      'Each 300 yards counts as another successful club delivery',
+      'Avoid cones and sprinklers to keep the run alive',
+      'After a crash, press Space or R to restart'
+    ]);
+    statusPill.textContent = 'Distance 0y';
+  }
+
+  function onKeyDown(code) {
+    if (code === 'ArrowUp' || code === 'Space') {
+      if (gameOver) resetGame();
+      else jump();
+    }
+    if (code === 'KeyR') resetGame();
+  }
+
+  function onKeyUp() {}
+  function onStop() {}
+  function onResize() {
+    groundY = canvas.height - groundHeight;
+    caddy.y = Math.min(caddy.y, groundY - caddy.h);
   }
 
   function getAdminControls() {
     return [
-      { id: 'refill-stamina', label: '💪 Refill stamina' },
-      { id: 'skip-round', label: '⏭️ Skip to next round' }
+      { id: 'clear-obstacles', label: '🧹 Clear obstacles' },
+      { id: 'instant-delivery', label: '🎒 Deliver clubs now' },
+      { id: 'toggle-invincible', label: invincible ? '🛡️ Disable invincibility' : '🛡️ Enable invincibility', secondary: true }
     ];
   }
 
   function runAdminAction(actionId) {
-    if (actionId === 'refill-stamina') {
-      caddy.stamina = 100;
+    if (actionId === 'clear-obstacles') {
+      obstacles = [];
       return;
     }
-    if (actionId === 'skip-round') {
-      showingQuestion = false;
-      startNextRound();
+    if (actionId === 'instant-delivery') {
+      deliveries += 1;
+      nextDeliveryAt = Math.max(nextDeliveryAt, distance + deliveryDistance);
+      deliveryFlashMs = 850;
+      return;
+    }
+    if (actionId === 'toggle-invincible') {
+      invincible = !invincible;
     }
   }
 
+  function loop(now = performance.now()) {
+    if (!currentWorld || currentWorld.id !== 'caddy') return;
+    const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
+    lastTick = now;
+    update(dt);
+    draw();
+    animationFrameId = requestAnimationFrame(loop);
+  }
+
   return {
-    id: "caddy",
+    id: 'caddy',
     onStart,
+    onStop,
+    onResize,
     onKeyDown,
     onKeyUp,
     loop,

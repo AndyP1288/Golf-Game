@@ -107,6 +107,7 @@ button:hover {
 }
 
 .world-thumb {
+  position: relative;
   width: 100%;
   min-height: 120px;
   border-radius: 12px;
@@ -114,6 +115,28 @@ button:hover {
   place-items: center;
   font-size: 2.5rem;
   background: linear-gradient(135deg, #d5e9ff, #f6fbff);
+}
+
+.world-thumb-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  display: none;
+}
+
+.world-thumb-fallback {
+  z-index: 1;
+}
+
+.world-thumb.has-image .world-thumb-image {
+  display: block;
+}
+
+.world-thumb.has-image .world-thumb-fallback {
+  display: none;
 }
 
 .world-card h2 {
