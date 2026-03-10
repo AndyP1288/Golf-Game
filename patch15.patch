@@ -1,0 +1,606 @@
+diff --git a/scripts/app.js b/scripts/app.js
+index 2f4c38e7797f8b74840830ec800f7c5f92df171a..861f6a4ec448dd3a3c2b5641df44a4d31acfd1c2 100644
+--- a/scripts/app.js
++++ b/scripts/app.js
+@@ -87,51 +87,51 @@ const left = document.createElement('div');
+ left.className = 'menu-col'; // <-- scrollable now
+ left.style.overflowY = 'auto'; // Added scroll
+ 
+ const title = document.createElement('div');
+ title.className = 'title';
+ title.textContent = 'Golf Worlds — Careers on the Green';
+ 
+ const subtitle = document.createElement('div');
+ subtitle.className = 'subtitle';
+ subtitle.textContent = 'Jump into immersive mini-worlds that demonstrate 5 different golf careers. Play and learn.';
+ 
+ left.appendChild(title);
+ left.appendChild(subtitle);
+ 
+ const adminButton = document.createElement('button');
+ adminButton.className = 'admin-btn';
+ adminButton.textContent = '🔒 Admin Console';
+ left.appendChild(adminButton);
+ 
+ // world definitions (id, name, summary, color, image)
+ const worlds = [
+   { id: 'pro', name: 'Pro Golfer', summary: 'Power, angle, and course strategy. Play par-3 course. Realistic ball flight and putts.', color: '#a6f0c6', image: 'Assets/images/progolfer.png' },
+   { id: 'designer', name: 'Course Designer', summary: 'Paint terrain, place hazards, test play lines and difficulty.', color: '#ffe9a3', image: 'Assets/images/coursedesigner.png' },
+   { id: 'greens', name: 'Greenskeeper', summary: 'Repair damage, manage irrigation, and keep turf healthy under time pressure.', color: '#c8e7ff', image: 'Assets/images/greenskeeper.png' },
+   { id: 'caddy', name: 'Caddy Dash', summary: 'Run nonstop and jump obstacles while delivering clubs to golfers down the fairway.', color: '#ffd6da', image: 'Assets/images/caddy.png' },
+-  { id: 'manager', name: 'Club Manager', summary: 'Plan events, manage budget & logistics — keep players happy.', color: '#e6d1ff', image: 'Assets/images/clubmanager.png' }
++  { id: 'manager', name: 'Club Manager', summary: 'Run a chaotic clubhouse shift: triage requests, chain combos, and keep members thrilled.', color: '#e6d1ff', image: 'Assets/images/clubmanager.png' }
+ ];
+ 
+ // Tile factory
+ const tiles = {};
+ worlds.forEach(w => {
+   const tile = document.createElement('div');
+   tile.className = 'world-tile';
+   tile.dataset.world = w.id;
+   tile.innerHTML = `<div class="world-thumb" style="background:linear-gradient(90deg,${w.color},#fff)">
+                       <img src="${w.image}" alt="${w.name}" loading="lazy" onload="this.nextElementSibling.style.display='none'" onerror="this.remove()">
+                       <span class="fallback">${w.name.split(' ').map(s => s[0]).join('')}</span>
+                     </div>
+                     <div class="world-info">
+                       <div style="font-weight:600">${w.name}</div>
+                       <div class="muted">${w.summary}</div>
+                     </div>
+                     <div><button class="play-btn">Play</button></div>`;
+   left.appendChild(tile);
+   tiles[w.id] = tile;
+ });
+ 
+ // Right column: canvas + HUD
+ const right = document.createElement('div');
+ right.className = 'canvas-wrap';
+ 
+@@ -1592,199 +1592,446 @@ function createCaddyWorld() {
+     onResize,
+     onKeyDown,
+     onKeyUp,
+     loop,
+     getAdminControls,
+     runAdminAction,
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   /* ===========================
+-     World: Club Manager (event logistics micro-game)
++     World: Club Manager (Clubhouse Rush simulation)
+      =========================== */
+   function createManagerWorld() {
+-    // Simple event scheduling & budget allocation puzzle
+-    let budget = 2000;
+-    const players = 120;
+-    const items = [
+-      { id:'catering', name:'Catering', cost: 400, benefit: 60, chosen:false },
+-      { id:'pr', name:'PR Campaign', cost: 300, benefit: 40, chosen:false },
+-      { id:'prize', name:'Prizes', cost: 450, benefit: 70, chosen:false },
+-      { id:'security', name:'Security', cost: 250, benefit: 30, chosen:false },
+-      { id:'greens', name:'Extra Greens Crew', cost: 200, benefit: 25, chosen:false }
++    const SHIFT_MS = 90000;
++
++    const resources = {
++      cash: 1200,
++      reputation: 60,
++      staffEnergy: 100,
++      teeDelays: 0,
++      servedGuests: 0,
++      combo: 0,
++      bestCombo: 0,
++      upgradesOwned: 0
++    };
++
++    const departments = [
++      {
++        id: 'proshop',
++        name: 'Pro Shop',
++        color: '#3b82f6',
++        x: 40,
++        y: 118,
++        w: 320,
++        h: 84,
++        efficiency: 1,
++        cooldownUntil: 0,
++        serviceText: 'Regrip clubs + find lost gloves.'
++      },
++      {
++        id: 'starter',
++        name: 'Starter Desk',
++        color: '#10b981',
++        x: 40,
++        y: 222,
++        w: 320,
++        h: 84,
++        efficiency: 1,
++        cooldownUntil: 0,
++        serviceText: 'Sort tee-sheet chaos + pace play.'
++      },
++      {
++        id: 'lounge',
++        name: 'Club Lounge',
++        color: '#f59e0b',
++        x: 40,
++        y: 326,
++        w: 320,
++        h: 84,
++        efficiency: 1,
++        cooldownUntil: 0,
++        serviceText: 'Drinks, stories, and impatient members.'
++      }
+     ];
+-    let satisfaction = 40;
+-    let booked = false;
+-    let overlayMsg = null;
+ 
+-    function draw() {
+-      ctx.fillStyle = '#eef6fb';
+-      ctx.fillRect(0,0,canvas.width,canvas.height);
+-      // left: items
+-      ctx.fillStyle = '#fff';
+-      drawRoundedRect(ctx, 20, 20, 360, canvas.height - 40, 12);
+-      ctx.fillStyle = '#222';
+-      ctx.font = '16px Inter';
+-      ctx.fillText('Event Options', 40, 48);
+-      items.forEach((it, idx) => {
+-        const y = 84 + idx*56;
+-        ctx.fillStyle = it.chosen ? '#d7ffd9' : '#f9f9f9';
+-        drawRoundedRect(ctx, 36, y-24, 320, 44, 8);
+-        ctx.fillStyle = '#333';
+-        ctx.font = '14px Inter';
+-        ctx.fillText(it.name + ` — $${it.cost}`, 48, y);
+-        ctx.fillStyle = '#666';
+-        ctx.font = '12px Inter';
+-        ctx.fillText(`Benefit: +${it.benefit}% satisfaction`, 48, y+18);
++    const upgrades = [
++      { id: 'pager', name: 'Marshal Radio Pager', cost: 260, effect: '+20% Starter speed', apply: () => departments[1].efficiency += 0.2 },
++      { id: 'espresso', name: 'Espresso Bar', cost: 300, effect: '+8 energy when serving lounge', apply: () => loungeEnergyBonus = 8 },
++      { id: 'assistant', name: 'Assistant Manager', cost: 360, effect: 'All departments +10% speed', apply: () => departments.forEach(d => d.efficiency += 0.1) },
++      { id: 'vip', name: 'VIP Gift Packs', cost: 420, effect: '+15 rep on VIP requests', apply: () => vipRepBonus = 15 }
++    ];
++
++    const requestTemplates = [
++      { type: 'proshop', label: 'Broken putter grip', rewardCash: 130, rewardRep: 7, penaltyRep: 8, penaltyDelay: 0 },
++      { type: 'starter', label: 'Tee-time backup forming', rewardCash: 120, rewardRep: 10, penaltyRep: 10, penaltyDelay: 1 },
++      { type: 'lounge', label: 'Post-round banquet rush', rewardCash: 150, rewardRep: 8, penaltyRep: 9, penaltyDelay: 0 },
++      { type: 'starter', label: 'Rain-delay reschedule', rewardCash: 170, rewardRep: 12, penaltyRep: 13, penaltyDelay: 1 },
++      { type: 'proshop', label: 'Junior clinic gear prep', rewardCash: 140, rewardRep: 9, penaltyRep: 10, penaltyDelay: 0 },
++      { type: 'lounge', label: 'Sponsor dinner setup', rewardCash: 180, rewardRep: 11, penaltyRep: 12, penaltyDelay: 0 },
++      { type: 'starter', label: 'VIP foursome is waiting', rewardCash: 210, rewardRep: 14, penaltyRep: 15, penaltyDelay: 1, vip: true }
++    ];
++
++    let activeRequests = [];
++    let shiftStart = 0;
++    let shiftOver = false;
++    let overlayMsg = '';
++    let overlayUntil = 0;
++    let lastTick = 0;
++    let spawnTimer = 0;
++    let nextUpgradeIndex = 0;
++    let loungeEnergyBonus = 0;
++    let vipRepBonus = 0;
++
++    function resetState() {
++      resources.cash = 1200;
++      resources.reputation = 60;
++      resources.staffEnergy = 100;
++      resources.teeDelays = 0;
++      resources.servedGuests = 0;
++      resources.combo = 0;
++      resources.bestCombo = 0;
++      resources.upgradesOwned = 0;
++      departments.forEach(d => {
++        d.efficiency = 1;
++        d.cooldownUntil = 0;
+       });
++      activeRequests = [];
++      shiftOver = false;
++      overlayMsg = '';
++      overlayUntil = 0;
++      lastTick = 0;
++      spawnTimer = 1000;
++      nextUpgradeIndex = 0;
++      loungeEnergyBonus = 0;
++      vipRepBonus = 0;
++      shiftStart = performance.now();
++      for (let i = 0; i < 2; i += 1) spawnRequest();
++    }
+ 
+-      // right side: budget and result
+-      ctx.fillStyle = '#fff';
+-      drawRoundedRect(ctx, canvas.width - 380, 20, 340, canvas.height - 40, 12);
+-      ctx.fillStyle = '#333';
+-      ctx.font = '16px Inter';
+-      ctx.fillText('Budget', canvas.width - 360, 48);
++    function getTimeLeft(now) {
++      return Math.max(0, SHIFT_MS - (now - shiftStart));
++    }
++
++    function showOverlay(text, ms = 1300) {
++      overlayMsg = text;
++      overlayUntil = performance.now() + ms;
++    }
++
++    function spawnRequest() {
++      if (activeRequests.length >= 5) return;
++      const template = requestTemplates[Math.floor(Math.random() * requestTemplates.length)];
++      const urgency = 12000 + Math.random() * 11000;
++      activeRequests.push({
++        id: `${template.type}-${Math.random().toString(36).slice(2, 8)}`,
++        type: template.type,
++        label: template.label,
++        rewardCash: template.rewardCash,
++        rewardRep: template.rewardRep,
++        penaltyRep: template.penaltyRep,
++        penaltyDelay: template.penaltyDelay,
++        vip: Boolean(template.vip),
++        expiresAt: performance.now() + urgency
++      });
++    }
++
++    function maybeOfferUpgrade() {
++      if (nextUpgradeIndex >= upgrades.length) return;
++      if (resources.cash < 1500 + nextUpgradeIndex * 250) return;
++      const upgrade = upgrades[nextUpgradeIndex];
++      if (resources.cash < upgrade.cost) return;
++      resources.cash -= upgrade.cost;
++      resources.upgradesOwned += 1;
++      upgrade.apply();
++      nextUpgradeIndex += 1;
++      showOverlay(`Upgrade unlocked: ${upgrade.name} (${upgrade.effect})`, 1900);
++    }
++
++    function serveDepartment(deptId) {
++      if (shiftOver) return;
++      const now = performance.now();
++      const dept = departments.find(d => d.id === deptId);
++      if (!dept || now < dept.cooldownUntil) return;
++
++      const reqIndex = activeRequests.findIndex(r => r.type === deptId);
++      if (reqIndex === -1) {
++        resources.combo = 0;
++        showOverlay(`${dept.name}: no urgent requests right now.`, 900);
++        return;
++      }
++
++      const req = activeRequests[reqIndex];
++      activeRequests.splice(reqIndex, 1);
++
++      const repGain = req.rewardRep + (req.vip ? vipRepBonus : 0) + Math.min(10, resources.combo * 2);
++      const cashGain = req.rewardCash + resources.combo * 12;
++      resources.reputation = Math.min(100, resources.reputation + repGain);
++      resources.cash += cashGain;
++      resources.staffEnergy = Math.max(0, resources.staffEnergy - 6 + (deptId === 'lounge' ? loungeEnergyBonus : 0));
++      resources.servedGuests += req.vip ? 12 : 8;
++      resources.combo += 1;
++      resources.bestCombo = Math.max(resources.bestCombo, resources.combo);
++
++      const cooldownMs = 1300 / dept.efficiency;
++      dept.cooldownUntil = now + cooldownMs;
++      showOverlay(`Handled: ${req.label} +$${cashGain} +${repGain} rep`);
++      spawnRequest();
++      maybeOfferUpgrade();
++    }
++
++    function update(now, dt) {
++      if (shiftOver) return;
++      spawnTimer -= dt;
++      if (spawnTimer <= 0) {
++        spawnRequest();
++        spawnTimer = Math.max(1300, 3800 - resources.servedGuests * 8);
++      }
++
++      const expired = [];
++      activeRequests = activeRequests.filter(req => {
++        if (now >= req.expiresAt) {
++          expired.push(req);
++          return false;
++        }
++        return true;
++      });
++
++      if (expired.length) {
++        expired.forEach(req => {
++          resources.reputation = Math.max(0, resources.reputation - req.penaltyRep);
++          resources.teeDelays += req.penaltyDelay;
++        });
++        resources.combo = 0;
++        showOverlay(`${expired.length} request(s) expired. Members are upset!`, 1500);
++        spawnRequest();
++      }
++
++      resources.staffEnergy = Math.max(0, resources.staffEnergy - dt * 0.0015);
++      if (resources.staffEnergy <= 15 && Math.random() < 0.01) {
++        resources.reputation = Math.max(0, resources.reputation - 1);
++      }
++
++      if (resources.reputation <= 0 || resources.teeDelays >= 8 || getTimeLeft(now) <= 0) {
++        shiftOver = true;
++        const success = resources.reputation > 0 && resources.teeDelays < 8;
++        showOverlay(success ? 'Shift complete! Tap any department to run another day.' : 'Club meltdown! Tap any department to retry.', 2600);
++      }
++    }
++
++    function drawMeter(label, value, max, x, y, w, color) {
++      ctx.fillStyle = '#d7dde8';
++      drawRoundedRect(ctx, x, y, w, 16, 8);
++      const fillW = clamp((value / max) * w, 0, w);
++      ctx.fillStyle = color;
++      drawRoundedRect(ctx, x, y, fillW, 16, 8);
++      ctx.fillStyle = '#1f2937';
++      ctx.font = '13px Inter';
++      ctx.textAlign = 'left';
++      ctx.fillText(label, x, y - 6);
++    }
++
++    function draw() {
++      ctx.fillStyle = '#ecf7f2';
++      ctx.fillRect(0, 0, canvas.width, canvas.height);
++
++      const now = performance.now();
++      const timeLeft = Math.ceil(getTimeLeft(now) / 1000);
++
++      ctx.fillStyle = '#ffffff';
++      drawRoundedRect(ctx, 20, 20, canvas.width - 40, 80, 14);
++      ctx.fillStyle = '#0f172a';
++      ctx.font = 'bold 22px Inter';
++      ctx.textAlign = 'left';
++      ctx.fillText('🏌️ Clubhouse Rush', 40, 52);
+       ctx.font = '14px Inter';
+-      ctx.fillText(`Remaining: $${budget}`, canvas.width - 360, 80);
+-      ctx.fillText(`Expected satisfaction: ${satisfaction}%`, canvas.width - 360, 112);
+-      // book button
+-      ctx.fillStyle = '#00695c';
+-      drawRoundedRect(ctx, canvas.width - 320, canvas.height - 100, 200, 44, 8);
+-      ctx.fillStyle = '#fff';
+-      ctx.font = '16px Inter';
+-      ctx.fillText('Book Event', canvas.width - 230, canvas.height - 72);
++      ctx.fillStyle = '#334155';
++      ctx.fillText(`Time Left: ${timeLeft}s  •  Served Guests: ${resources.servedGuests}  •  Best Combo: x${resources.bestCombo}`, 40, 78);
++
++      drawMeter('Reputation', resources.reputation, 100, 420, 130, canvas.width - 460, '#10b981');
++      drawMeter('Staff Energy', resources.staffEnergy, 100, 420, 170, canvas.width - 460, '#f59e0b');
++
++      ctx.fillStyle = '#1f2937';
++      ctx.font = '15px Inter';
++      ctx.fillText(`Cash: $${Math.floor(resources.cash)}`, 420, 220);
++      ctx.fillText(`Tee Delays: ${resources.teeDelays}/8`, 420, 246);
++      if (nextUpgradeIndex < upgrades.length) {
++        const up = upgrades[nextUpgradeIndex];
++        ctx.fillStyle = '#475569';
++        ctx.fillText(`Next auto-upgrade: ${up.name} ($${up.cost})`, 420, 272);
++      }
++
++      departments.forEach((dept, idx) => {
++        const req = activeRequests.find(r => r.type === dept.id);
++        const cooling = performance.now() < dept.cooldownUntil;
++        const offsetY = idx * 2;
++        ctx.fillStyle = req ? '#ffffff' : '#f8fafc';
++        drawRoundedRect(ctx, dept.x, dept.y + offsetY, dept.w, dept.h, 12);
++
++        ctx.fillStyle = dept.color;
++        drawRoundedRect(ctx, dept.x + 10, dept.y + 12 + offsetY, 10, dept.h - 24, 6);
++
++        ctx.fillStyle = '#0f172a';
++        ctx.font = 'bold 16px Inter';
++        ctx.fillText(dept.name, dept.x + 30, dept.y + 30 + offsetY);
++        ctx.font = '13px Inter';
++        ctx.fillStyle = '#475569';
++        ctx.fillText(dept.serviceText, dept.x + 30, dept.y + 50 + offsetY);
++
++        if (req) {
++          const remain = Math.max(0, req.expiresAt - performance.now());
++          const urgency = remain < 5000 ? '#ef4444' : '#2563eb';
++          ctx.fillStyle = urgency;
++          ctx.fillText(`${req.vip ? 'VIP • ' : ''}${req.label}`, dept.x + 30, dept.y + 70 + offsetY);
++          const barW = 130;
++          const ratio = clamp(remain / 23000, 0, 1);
++          ctx.fillStyle = '#cbd5e1';
++          drawRoundedRect(ctx, dept.x + dept.w - barW - 16, dept.y + 58 + offsetY, barW, 10, 5);
++          ctx.fillStyle = urgency;
++          drawRoundedRect(ctx, dept.x + dept.w - barW - 16, dept.y + 58 + offsetY, barW * ratio, 10, 5);
++        } else {
++          ctx.fillStyle = '#94a3b8';
++          ctx.fillText('No queue. Tap to motivate staff.', dept.x + 30, dept.y + 70 + offsetY);
++        }
++
++        if (cooling) {
++          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
++          drawRoundedRect(ctx, dept.x, dept.y + offsetY, dept.w, dept.h, 12);
++          ctx.fillStyle = '#fff';
++          ctx.font = 'bold 14px Inter';
++          ctx.fillText('Busy...', dept.x + dept.w - 78, dept.y + 30 + offsetY);
++        }
++      });
++
++      if (overlayMsg && performance.now() < overlayUntil) {
++        ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
++        drawRoundedRect(ctx, 30, canvas.height - 72, canvas.width - 60, 46, 10);
++        ctx.fillStyle = '#fff';
++        ctx.font = '14px Inter';
++        ctx.textAlign = 'center';
++        ctx.fillText(overlayMsg, canvas.width / 2, canvas.height - 43);
++      }
++      ctx.textAlign = 'left';
+     }
+ 
+     function onMouseDown(m) {
+-      // click items left column
+-      const localX = m.x, localY = m.y;
+-      for (let i=0;i<items.length;i++){
+-        const y = 84 + i*56;
+-        if (localX >= 36 && localX <= 356 && localY >= y-24 && localY <= y+20) {
+-          // toggle selection
+-          const it = items[i];
+-          if (!it.chosen) {
+-            if (budget >= it.cost) {
+-              it.chosen = true;
+-              budget -= it.cost;
+-              satisfaction += it.benefit;
+-            } else {
+-              overlayMsg = 'Not enough budget for that item.';
+-              setTimeout(()=>overlayMsg = null, 1000);
+-            }
+-          } else {
+-            it.chosen = false;
+-            budget += it.cost;
+-            satisfaction -= it.benefit;
+-          }
++      const now = performance.now();
++      if (shiftOver) {
++        resetState();
++        return;
++      }
++      for (const dept of departments) {
++        if (m.x >= dept.x && m.x <= dept.x + dept.w && m.y >= dept.y && m.y <= dept.y + dept.h) {
++          serveDepartment(dept.id);
++          return;
+         }
+       }
+-      // Book event button
+-      if (m.x >= canvas.width - 320 && m.x <= canvas.width - 120 && m.y >= canvas.height - 100 && m.y <= canvas.height - 56) {
+-        // finalize
+-        booked = true;
+-        overlayMsg = `Event Booked! Final satisfaction ${satisfaction}%`;
+-        setTimeout(()=>{ overlayMsg=null; }, 2200);
++      if (m.x >= 420 && m.x <= canvas.width - 40 && m.y >= 20 && m.y <= 100) {
++        showOverlay(`You have ${Math.ceil(getTimeLeft(now) / 1000)}s left in this shift.`, 900);
+       }
+     }
+ 
+     function onStart() {
+       hudWorld.textContent = 'Club Manager';
+-      hudSub.textContent = 'Allocate budget across items and book your event. Click options to toggle.';
++      hudSub.textContent = 'Run a 90-second shift: clear requests, protect reputation, and avoid tee-time delays.';
+       setInstructions('Club Manager Controls', [
+-        'Click an option card to toggle it on/off',
+-        'Chosen options reduce budget and increase satisfaction',
+-        'Book Event button finalizes your current plan',
+-        'Balance spending so satisfaction stays high'
++        'Click each department card to resolve matching requests.',
++        'Build combos by serving requests back-to-back for bonus cash + reputation.',
++        'Avoid request timeouts: they reduce reputation and add tee-time delays.',
++        'Earn automatic upgrades as cash climbs, then survive until shift timer ends.'
+       ]);
+-      statusPill.textContent = 'Manager mode';
+-      budget = 2000; satisfaction = 40;
+-      items.forEach(it => it.chosen=false);
+-      booked=false;
++      statusPill.textContent = 'Clubhouse rush';
++      resetState();
+     }
+ 
+     function onStop() {}
+     function onMouseMove() {}
+     function onMouseUp() {}
+     function onKeyDown() {}
+     function onKeyUp() {}
+     function onResize() {}
+ 
+     function getAdminControls() {
+       return [
+-        { id: 'max-satisfaction', label: '📈 Max satisfaction' },
+-        { id: 'refill-budget', label: '💰 Refill budget' },
+-        { id: 'book-event', label: '✅ Auto-book event' }
++        { id: 'boost-rep', label: '🌟 Boost reputation' },
++        { id: 'add-cash', label: '💵 Add $1000' },
++        { id: 'spawn-vip', label: '🎟️ Spawn VIP request' }
+       ];
+     }
+ 
+     function runAdminAction(actionId) {
+-      if (actionId === 'max-satisfaction') {
+-        satisfaction = 100;
+-        return;
++      if (actionId === 'boost-rep') {
++        resources.reputation = Math.min(100, resources.reputation + 25);
++        showOverlay('Admin boost: reputation increased.');
+       }
+-      if (actionId === 'refill-budget') {
+-        budget = 5000;
+-        return;
++      if (actionId === 'add-cash') {
++        resources.cash += 1000;
++        maybeOfferUpgrade();
+       }
+-      if (actionId === 'book-event') {
+-        booked = true;
+-        overlayMsg = `Admin booked event! Final satisfaction ${satisfaction}%`;
++      if (actionId === 'spawn-vip') {
++        activeRequests.push({
++          id: `vip-${Math.random().toString(36).slice(2, 8)}`,
++          type: 'starter',
++          label: 'VIP sponsor arrived early',
++          rewardCash: 260,
++          rewardRep: 16,
++          penaltyRep: 18,
++          penaltyDelay: 1,
++          vip: true,
++          expiresAt: performance.now() + 15000
++        });
++        showOverlay('Admin spawned a VIP request.', 1200);
+       }
+     }
+ 
+-    function loop() {
++    function loop(now = performance.now()) {
+       if (!currentWorld || currentWorld.id !== 'manager') return;
++      const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
++      lastTick = now;
++      update(now, dt);
+       draw();
+-      if (overlayMsg) {
+-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+-        ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+-        ctx.fillStyle = '#fff';
+-        ctx.font = '18px Inter';
+-        ctx.fillText(overlayMsg, canvas.width/2, canvas.height - 40);
+-      }
+       animationFrameId = requestAnimationFrame(loop);
+     }
+ 
+     return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop, getAdminControls, runAdminAction };
+   }
+ 
++
+   /* ===========================
+      World dispatching & startup
+      =========================== */
+ 
+   // world instances cached
+   const worldConstructors = {
+     'pro': createProGolferWorld,
+     'designer': createDesignerWorld,
+     'greens': createGreenskeeperWorld,
+     'caddy': createCaddyWorld,
+     'manager': createManagerWorld
+   };
+ 
+   function startWorld(id) {
+     if (!worldConstructors[id]) {
+       console.warn('No constructor for', id);
+       return;
+     }
+     statusPill.textContent = 'Loading...';
+     stopCurrentWorld();
+     // create new instance
+     const world = worldConstructors[id]();
+     currentWorld = world;
+     currentWorld.id = id;
+     // start-up
