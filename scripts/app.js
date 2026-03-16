@@ -1824,18 +1824,14 @@ function createCaddyWorld() {
       }
 
       activeRequests.splice(idx, 1);
-      const rushMult = isRush(now) ? 1.9 : 1;
-      const comboMult = 1 + Math.min(0.9, resources.combo * 0.1);
-      const urgencyBonus = req.urgent ? 1.15 : 1;
-      const boostMult = hasDispatchBoost(now) ? 1.15 : 1;
-
       const comboMult = 1 + Math.min(0.8, resources.combo * 0.08);
-      const rushMult = isRush(now) ? 2 : 1;
-      const vipBonus = req.vip ? 10 : 0;
-      const scoreGain = Math.round((req.rewardScore + vipBonus) * comboMult * rushMult);
-      const cashGain = Math.round(req.rewardCash * comboMult * rushMult);
-      const repGain = Math.round((req.rewardRep + Math.min(6, resources.combo)) * rushMult);
+const rushMult = isRush(now) ? 2 : 1;
+const vipBonus = req.vip ? 10 : 0;
 
+const scoreGain = Math.round((req.rewardScore + vipBonus) * comboMult * rushMult);
+const cashGain = Math.round(req.rewardCash * comboMult * rushMult);
+const repGain = Math.round((req.rewardRep + Math.min(6, resources.combo)) * rushMult);
+       
       resources.score += scoreGain;
       resources.cash += cashGain;
       resources.reputation = Math.min(100, resources.reputation + repGain);
