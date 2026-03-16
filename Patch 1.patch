@@ -1,0 +1,875 @@
+diff --git a/scripts/app.js b/scripts/app.js
+index eadcad66d0c4038fefcd15fa300dc83a42ce502e..7dbc376546095a6606cb4dbe5d6c65f2cffeb5aa 100644
+--- a/scripts/app.js
++++ b/scripts/app.js
+@@ -1627,502 +1627,587 @@ function createCaddyWorld() {
+     loop,
+     getAdminControls,
+     runAdminAction,
+   };
+ }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+   /* ===========================
+      World: Club Manager (Clubhouse Rush simulation)
+      =========================== */
+   function createManagerWorld() {
+-    const SHIFT_MS = 90000;
+-    const GOAL_SCORE = 1000;
+-
+-    const resources = {
+-      cash: 900,
+-      reputation: 70,
+-      staffEnergy: 100,
+-      teeDelays: 0,
+-      combo: 0,
+-      bestCombo: 0,
+-      score: 0,
+-      rushUntil: 0
+-    };
++    const SHIFT_MS = 100000;
++    const GOAL_SCORE = 2200;
++    const MAX_QUEUE = 9;
++    const LOSE_DELAY_CAP = 10;
+ 
+     const departments = [
+-      { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 40, y: 132, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Gear repairs, fittings, and last-minute purchases.' },
+-      { id: 'starter', name: 'Starter Desk', color: '#10b981', x: 40, y: 244, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Tee-sheet flow, pairings, and pace-of-play issues.' },
+-      { id: 'lounge', name: 'Club Lounge', color: '#f59e0b', x: 40, y: 356, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Food, drinks, events, and member hospitality.' }
++      { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 32, y: 170, w: 340, h: 96, efficiency: 1, cooldownUntil: 0, serviceText: 'Gear repairs, fittings, and quick retail.' },
++      { id: 'starter', name: 'Starter Desk', color: '#10b981', x: 32, y: 284, w: 340, h: 96, efficiency: 1, cooldownUntil: 0, serviceText: 'Pairings, delays, weather calls, and flow.' },
++      { id: 'lounge', name: 'Club Lounge', color: '#f59e0b', x: 32, y: 398, w: 340, h: 96, efficiency: 1, cooldownUntil: 0, serviceText: 'Food, events, and member experience.' }
+     ];
+ 
+     const upgrades = [
+-      { id: 'radio', name: 'Marshal Radio Net', cost: 300, effect: '+20% Starter speed', apply: () => departments[1].efficiency += 0.2 },
+-      { id: 'runner', name: 'Shop Runner', cost: 350, effect: '+20% Pro Shop speed', apply: () => departments[0].efficiency += 0.2 },
+-      { id: 'host', name: 'Floor Host', cost: 400, effect: '+20% Lounge speed', apply: () => departments[2].efficiency += 0.2 },
+-      { id: 'team', name: 'Team Pep Talk', cost: 500, effect: 'All departments +10% speed', apply: () => departments.forEach(d => d.efficiency += 0.1) }
++      { id: 'radio', name: 'Marshal Radio Net', cost: 420, effect: '+20% Starter speed', apply: () => { departments[1].efficiency += 0.2; } },
++      { id: 'runner', name: 'Shop Runner', cost: 500, effect: '+20% Pro Shop speed', apply: () => { departments[0].efficiency += 0.2; } },
++      { id: 'host', name: 'Floor Host', cost: 560, effect: '+20% Lounge speed', apply: () => { departments[2].efficiency += 0.2; } },
++      { id: 'team', name: 'Team Huddle', cost: 700, effect: 'All departments +10% speed', apply: () => { departments.forEach(d => { d.efficiency += 0.1; }); } },
++      { id: 'analytics', name: 'Live Ops Board', cost: 900, effect: '+15% score from all dispatches', apply: () => { state.scoreBonus += 0.15; } }
+     ];
+ 
+     const requestTemplates = [
+-      { type: 'proshop', label: 'Grip replacement', rewardCash: 95, rewardRep: 7, rewardScore: 48, penaltyRep: 6, penaltyDelay: 0 },
+-      { type: 'starter', label: 'Tee time backup', rewardCash: 110, rewardRep: 9, rewardScore: 54, penaltyRep: 8, penaltyDelay: 1 },
+-      { type: 'lounge', label: 'Lunch rush queue', rewardCash: 100, rewardRep: 8, rewardScore: 52, penaltyRep: 7, penaltyDelay: 0 },
+-      { type: 'starter', label: 'Weather reschedule', rewardCash: 130, rewardRep: 10, rewardScore: 60, penaltyRep: 10, penaltyDelay: 1 },
+-      { type: 'proshop', label: 'Junior clinic setup', rewardCash: 120, rewardRep: 9, rewardScore: 58, penaltyRep: 8, penaltyDelay: 0 },
+-      { type: 'lounge', label: 'Sponsor dinner prep', rewardCash: 140, rewardRep: 11, rewardScore: 66, penaltyRep: 10, penaltyDelay: 0 },
+-      { type: 'starter', label: 'VIP group arrived early', rewardCash: 160, rewardRep: 12, rewardScore: 72, penaltyRep: 12, penaltyDelay: 1, vip: true }
++      { type: 'proshop', label: 'Grip replacement', rewardCash: 88, rewardRep: 5, rewardScore: 45, penaltyRep: 5, penaltyDelay: 0, basePatience: 14000 },
++      { type: 'starter', label: 'Tee time backup', rewardCash: 112, rewardRep: 8, rewardScore: 62, penaltyRep: 8, penaltyDelay: 1, basePatience: 12000 },
++      { type: 'lounge', label: 'Lunch rush queue', rewardCash: 104, rewardRep: 7, rewardScore: 56, penaltyRep: 6, penaltyDelay: 0, basePatience: 13000 },
++      { type: 'starter', label: 'Weather reschedule', rewardCash: 126, rewardRep: 9, rewardScore: 70, penaltyRep: 10, penaltyDelay: 1, basePatience: 11000 },
++      { type: 'proshop', label: 'Junior clinic setup', rewardCash: 116, rewardRep: 8, rewardScore: 60, penaltyRep: 7, penaltyDelay: 0, basePatience: 12000 },
++      { type: 'lounge', label: 'Sponsor dinner prep', rewardCash: 138, rewardRep: 10, rewardScore: 78, penaltyRep: 9, penaltyDelay: 0, basePatience: 11000 },
++      { type: 'proshop', label: 'Tournament rental scramble', rewardCash: 142, rewardRep: 10, rewardScore: 80, penaltyRep: 9, penaltyDelay: 0, basePatience: 10000, urgent: true },
++      { type: 'starter', label: 'VIP group arrived early', rewardCash: 170, rewardRep: 12, rewardScore: 92, penaltyRep: 12, penaltyDelay: 1, basePatience: 9000, vip: true, urgent: true },
++      { type: 'lounge', label: 'Wedding reception pivot', rewardCash: 168, rewardRep: 11, rewardScore: 90, penaltyRep: 11, penaltyDelay: 0, basePatience: 9500, urgent: true }
+     ];
+ 
+-    let shiftStart = 0;
+-    let shiftOver = false;
+-    let shiftWon = false;
+-    let overlayMsg = '';
+-    let overlayUntil = 0;
+-    let lastTick = 0;
+-    let spawnTimer = 0;
+-    let rushTimer = 18000;
+-    let nextUpgradeIndex = 0;
++    const state = {
++      cash: 820,
++      reputation: 72,
++      staffEnergy: 100,
++      teeDelays: 0,
++      misses: 0,
++      combo: 0,
++      bestCombo: 0,
++      score: 0,
++      scoreBonus: 0,
++      rushUntil: 0,
++      selectedDeptId: null,
++      shiftStart: 0,
++      shiftOver: false,
++      shiftWon: false,
++      overlayMsg: '',
++      overlayUntil: 0,
++      queue: [],
++      hoveredRequestId: null,
++      spawnTimer: 0,
++      difficulty: 1,
++      nextUpgradeIndex: 0,
++      lastTick: 0,
++      rushTimer: 19000
++    };
+ 
+     function resetState() {
+-      resources.cash = 900;
+-      resources.reputation = 70;
+-      resources.staffEnergy = 100;
+-      resources.teeDelays = 0;
+-      resources.combo = 0;
+-      resources.bestCombo = 0;
+-      resources.score = 0;
+-      resources.rushUntil = 0;
++      state.cash = 820;
++      state.reputation = 72;
++      state.staffEnergy = 100;
++      state.teeDelays = 0;
++      state.misses = 0;
++      state.combo = 0;
++      state.bestCombo = 0;
++      state.score = 0;
++      state.scoreBonus = 0;
++      state.rushUntil = 0;
++      state.selectedDeptId = null;
++      state.shiftStart = nowMs();
++      state.shiftOver = false;
++      state.shiftWon = false;
++      state.overlayMsg = '';
++      state.overlayUntil = 0;
++      state.queue = [];
++      state.hoveredRequestId = null;
++      state.spawnTimer = 650;
++      state.difficulty = 1;
++      state.nextUpgradeIndex = 0;
++      state.lastTick = 0;
++      state.rushTimer = 19000;
+       departments.forEach(d => {
+         d.cooldownUntil = 0;
+         d.efficiency = 1;
+       });
+-      shiftStart = nowMs();
+-      shiftOver = false;
+-      shiftWon = false;
+-      overlayMsg = '';
+-      overlayUntil = 0;
+-      lastTick = 0;
+-      spawnTimer = 900;
+-      rushTimer = 18000;
+-      nextUpgradeIndex = 0;
+-      shiftStart = performance.now();
+-      for (let i = 0; i < 3; i += 1) spawnRequest();
++      for (let i = 0; i < 4; i += 1) spawnRequest(i === 0);
+     }
+ 
+     function getTimeLeft(now) {
+-      return Math.max(0, SHIFT_MS - (now - shiftStart));
++      return Math.max(0, SHIFT_MS - (now - state.shiftStart));
+     }
+ 
+     function isRush(now = nowMs()) {
+-      return now < resources.rushUntil;
++      return now < state.rushUntil;
+     }
+ 
+-    function hasDispatchBoost(now = nowMs()) {
+-      return now < resources.dispatchBoostUntil;
++    function showOverlay(text, ms = 1200) {
++      state.overlayMsg = text;
++      state.overlayUntil = nowMs() + ms;
+     }
+ 
+-    function showOverlay(text, ms = 1200) {
+-      overlayMsg = text;
+-      overlayUntil = nowMs() + ms;
++    function findDepartmentById(id) {
++      return departments.find(d => d.id === id) || null;
++    }
++
++    function difficultyScale(now) {
++      const elapsed = now - state.shiftStart;
++      return 1 + clamp(elapsed / SHIFT_MS, 0, 1) * 0.8;
+     }
+ 
+-    function isRush(now = performance.now()) {
+-      return now < resources.rushUntil;
++    function requestPatience(template, now) {
++      const scale = difficultyScale(now);
++      const minPatience = template.vip ? 5600 : 6600;
++      return Math.max(minPatience, template.basePatience / scale + Math.random() * 900);
+     }
+ 
+     function spawnRequest(forceVip = false) {
+-      if (activeRequests.length >= 7) return;
++      if (state.queue.length >= MAX_QUEUE) return;
+       const template = forceVip
+-        ? requestTemplates.find(r => r.vip) || requestTemplates[0]
++        ? (requestTemplates.find(r => r.vip) || requestTemplates[0])
+         : requestTemplates[Math.floor(Math.random() * requestTemplates.length)];
+-      const urgency = 9000 + Math.random() * 9000;
+-      activeRequests.push({
++      const now = nowMs();
++      const patience = requestPatience(template, now);
++      state.queue.push({
+         id: `${template.type}-${Math.random().toString(36).slice(2, 8)}`,
+         type: template.type,
+         label: template.label,
+         rewardCash: template.rewardCash,
+         rewardRep: template.rewardRep,
+         rewardScore: template.rewardScore,
+         penaltyRep: template.penaltyRep,
+         penaltyDelay: template.penaltyDelay,
+         urgent: Boolean(template.urgent),
+         vip: Boolean(template.vip),
+-        expiresAt: nowMs() + patience
++        createdAt: now,
++        expiresAt: now + patience,
++        patience
+       });
+     }
+ 
+     function maybeBuyUpgrade() {
+-      if (nextUpgradeIndex >= upgrades.length) return;
+-      const upgrade = upgrades[nextUpgradeIndex];
+-      if (resources.cash < upgrade.cost) return;
+-      resources.cash -= upgrade.cost;
+-      upgrade.apply();
+-      nextUpgradeIndex += 1;
+-      showOverlay(`Upgrade: ${upgrade.name} (${upgrade.effect})`, 1700);
+-    }
+-
+-    function triggerRush(now = performance.now()) {
+-      resources.rushUntil = now + 8000;
+-      showOverlay('Rush Hour! Score and cash doubled for 8 seconds!', 1800);
++      while (state.nextUpgradeIndex < upgrades.length) {
++        const upgrade = upgrades[state.nextUpgradeIndex];
++        if (state.cash < upgrade.cost) return;
++        state.cash -= upgrade.cost;
++        upgrade.apply();
++        state.nextUpgradeIndex += 1;
++        showOverlay(`Upgrade unlocked: ${upgrade.name} (${upgrade.effect})`, 1700);
++      }
+     }
+ 
+-    function applyFailureFromTimeout(req) {
+-      resources.reputation = Math.max(0, resources.reputation - req.penaltyRep);
+-      resources.teeDelays += req.penaltyDelay;
+-      resources.staffEnergy = Math.max(0, resources.staffEnergy - 6);
+-      resources.combo = 0;
++    function triggerRush(now = nowMs()) {
++      state.rushUntil = now + 7000;
++      showOverlay('Rush Hour! Dispatch rewards doubled for 7 seconds.', 1600);
+     }
+ 
+-    function penaltyForMiss(req) {
+-      resources.reputation = Math.max(0, resources.reputation - req.penaltyRep);
+-      resources.teeDelays += req.penaltyDelay;
+-      resources.staffEnergy = Math.max(0, resources.staffEnergy - 6);
+-      resources.combo = 0;
+-      resources.missed += 1;
++    function failRequest(req, timedOut) {
++      state.reputation = Math.max(0, state.reputation - req.penaltyRep);
++      state.teeDelays += req.penaltyDelay;
++      state.staffEnergy = Math.max(0, state.staffEnergy - (timedOut ? 6 : 4));
++      state.combo = 0;
++      state.misses += 1;
+     }
+ 
+-    function findDepartmentById(id) {
+-      return departments.find(d => d.id === id) || null;
+-    }
+-
+-    function routeRequest(requestId) {
+-      if (!selectedDeptId || shiftOver) {
+-        showOverlay('Select a department first, then assign a request.', 900);
+-        return;
+-      }
+-      const dept = findDepartmentById(selectedDeptId);
+-      const now = nowMs();
+-      if (!dept) return;
+-      if (now < dept.cooldownUntil) {
+-        showOverlay(`${dept.name} is busy. Pick another desk or wait.`, 900);
++    function completeRequest(req, dept, now) {
++      const deptMatch = req.type === dept.id;
++      const available = now >= dept.cooldownUntil;
++      if (!available || !deptMatch) {
++        failRequest(req, false);
++        const which = !available ? `${dept.name} is still busy.` : `Wrong routing: ${req.label} needs ${findDepartmentById(req.type)?.name || req.type}.`;
++        showOverlay(which, 1200);
+         return;
+       }
+ 
+-      const idx = activeRequests.findIndex(r => r.id === requestId);
+-      if (idx === -1) return;
+-      const req = activeRequests[idx];
+-
+-      if (req.type !== dept.id) {
+-        resources.combo = 0;
+-        resources.staffEnergy = Math.max(0, resources.staffEnergy - 4);
+-        showOverlay(`${dept.name} had no waiting request. You lost momentum.`, 1000);
+-        dept.cooldownUntil = now + 550;
+-        return;
+-      }
+-
+-      activeRequests.splice(idx, 1);
+-      const comboMult = 1 + Math.min(0.8, resources.combo * 0.08);
+-const rushMult = isRush(now) ? 2 : 1;
+-const vipBonus = req.vip ? 10 : 0;
+-
+-const scoreGain = Math.round((req.rewardScore + vipBonus) * comboMult * rushMult);
+-const cashGain = Math.round(req.rewardCash * comboMult * rushMult);
+-const repGain = Math.round((req.rewardRep + Math.min(6, resources.combo)) * rushMult);
+-       
+-      resources.score += scoreGain;
+-      resources.cash += cashGain;
+-      resources.reputation = Math.min(100, resources.reputation + repGain);
+-      resources.staffEnergy = Math.max(0, Math.min(100, resources.staffEnergy - (8 - dept.efficiency * 2)));
+-      resources.servedGuests += 1;
+-      resources.combo += 1;
+-      resources.bestCombo = Math.max(resources.bestCombo, resources.combo);
+-
+-      const cooldown = 850 - dept.efficiency * 200;
+-      dept.cooldownUntil = now + Math.max(350, cooldown);
++      const ageRatio = clamp((now - req.createdAt) / Math.max(1, req.patience), 0, 1);
++      const timingBonus = 1 + (1 - ageRatio) * 0.5;
++      const rushMul = isRush(now) ? 2 : 1;
++      const comboMul = 1 + Math.min(1.2, state.combo * 0.05);
++      const scoreBonusMul = 1 + state.scoreBonus;
++      const energyMul = 0.75 + state.staffEnergy / 100 * 0.35;
++
++      const gainCash = Math.round(req.rewardCash * rushMul * (0.95 + timingBonus * 0.2));
++      const gainRep = Math.max(1, Math.round(req.rewardRep * (req.vip ? 1.2 : 1)));
++      const gainScore = Math.round(req.rewardScore * rushMul * comboMul * timingBonus * scoreBonusMul * energyMul);
++
++      state.cash += gainCash;
++      state.reputation = Math.min(100, state.reputation + gainRep);
++      state.score += gainScore;
++      state.combo += 1;
++      state.bestCombo = Math.max(state.bestCombo, state.combo);
++      state.staffEnergy = Math.max(0, state.staffEnergy - (req.vip ? 6 : 4));
++
++      const baseCd = 950;
++      const cooldown = Math.max(300, baseCd / (dept.efficiency * (0.8 + state.staffEnergy / 130)));
++      dept.cooldownUntil = now + cooldown;
++
++      const label = req.vip ? `VIP solved +${gainScore} score` : `Dispatch complete +${gainScore}`;
++      showOverlay(label, 900);
+       maybeBuyUpgrade();
+-
+-      if (req.vip) showOverlay(`VIP handled! +${scoreGain} score`, 1100);
+     }
+ 
+-    function evaluateEndState(now) {
+-      const timeUp = getTimeLeft(now) <= 0;
+-      const failed = resources.reputation <= 0 || resources.teeDelays >= 8;
+-      const reachedGoal = resources.score >= GOAL_SCORE;
+-      if (!timeUp && !failed) return;
+-
+-      shiftOver = true;
+-      shiftWon = reachedGoal && !failed;
+-      if (shiftWon) {
+-        showOverlay(`Shift cleared! Goal hit: ${resources.score}/${GOAL_SCORE}. Click to play again.`, 100000);
+-      } else {
+-        const failReason = failed
+-          ? (resources.reputation <= 0 ? 'reputation collapsed' : 'tee delays got out of control')
+-          : 'time expired before you hit the score goal';
+-        showOverlay(`Shift failed (${failReason}). Score ${resources.score}/${GOAL_SCORE}. Click to retry.`, 100000);
++    function handleExpired(now) {
++      const keep = [];
++      for (const req of state.queue) {
++        if (now > req.expiresAt) {
++          failRequest(req, true);
++        } else {
++          keep.push(req);
++        }
+       }
++      if (keep.length !== state.queue.length) {
++        showOverlay('A request expired. Reputation and flow took a hit.', 1200);
++      }
++      state.queue = keep;
+     }
+ 
+     function update(now, dt) {
+-      if (shiftOver) return;
++      if (state.shiftOver) return;
++
++      state.difficulty = difficultyScale(now);
++
++      state.staffEnergy = clamp(
++        state.staffEnergy + (0.0038 - state.queue.length * 0.0018) * dt,
++        0,
++        100
++      );
+ 
+-      spawnTimer -= dt;
+-      rushTimer -= dt;
++      handleExpired(now);
+ 
+-      const baseSpawn = isRush(now) ? 650 : 1200;
+-      if (spawnTimer <= 0) {
+-        spawnRequest();
+-        spawnTimer = Math.max(450, baseSpawn - resources.servedGuests * 4);
++      state.spawnTimer -= dt;
++      if (state.spawnTimer <= 0) {
++        spawnRequest(Math.random() < 0.08 + (state.difficulty - 1) * 0.09);
++        const nextSpawn = 1750 - state.difficulty * 520 + Math.random() * 350;
++        state.spawnTimer = Math.max(620, nextSpawn);
+       }
+ 
+-      if (rushTimer <= 0) {
++      state.rushTimer -= dt;
++      if (state.rushTimer <= 0) {
+         triggerRush(now);
+-        rushTimer = 24000;
++        state.rushTimer = 18500 + Math.random() * 3800;
+       }
+ 
+-      for (let i = activeRequests.length - 1; i >= 0; i -= 1) {
+-        if (activeRequests[i].expiresAt <= now) {
+-          const req = activeRequests[i];
+-          activeRequests.splice(i, 1);
+-          applyFailureFromTimeout(req);
+-          showOverlay(`Missed: ${req.label}`, 1000);
+-        }
++      if (state.queue.length >= MAX_QUEUE) {
++        state.reputation = Math.max(0, state.reputation - dt * 0.0032);
++        state.teeDelays += dt * 0.00055;
+       }
+ 
+-      if (resources.staffEnergy < 100) {
+-        const regen = isRush(now) ? 0.008 : 0.015;
+-        resources.staffEnergy = Math.min(100, resources.staffEnergy + dt * regen);
++      const timeLeft = getTimeLeft(now);
++      if (state.score >= GOAL_SCORE) {
++        state.shiftOver = true;
++        state.shiftWon = true;
++      } else if (timeLeft <= 0 || state.reputation <= 0 || state.teeDelays >= LOSE_DELAY_CAP) {
++        state.shiftOver = true;
++        state.shiftWon = false;
+       }
+ 
+-      if (resources.staffEnergy < 25) {
+-        resources.reputation = Math.max(0, resources.reputation - dt * 0.0022);
+-      }
++      const delays = Math.max(0, Math.round(state.teeDelays));
++      const status = state.shiftOver
++        ? (state.shiftWon ? 'Shift cleared' : 'Shift failed')
++        : `Score ${Math.round(state.score)}/${GOAL_SCORE} • Rep ${Math.round(state.reputation)} • Delays ${delays}/${LOSE_DELAY_CAP}`;
++      statusPill.textContent = status;
++    }
++
++    function drawQueue(now) {
++      const x = 398;
++      const y = 154;
++      const w = canvas.width - x - 26;
++      const h = canvas.height - y - 30;
++      ctx.fillStyle = '#ffffffd8';
++      drawRoundedRect(ctx, x, y, w, h, 16);
++
++      ctx.fillStyle = '#0f172a';
++      ctx.font = 'bold 16px Inter';
++      ctx.fillText('Dispatch Queue', x + 14, y + 24);
++      ctx.font = '12px Inter';
++      ctx.fillStyle = '#475569';
++      ctx.fillText('Select department card (left) then click a matching request.', x + 14, y + 42);
++
++      const rowH = 42;
++      const startY = y + 56;
++      state.queue.slice(0, 9).forEach((req, idx) => {
++        const rowY = startY + idx * (rowH + 8);
++        const remain = Math.max(0, req.expiresAt - now);
++        const fraction = clamp(remain / req.patience, 0, 1);
++        const nearExpiry = fraction < 0.35;
++        const hovered = state.hoveredRequestId === req.id;
+ 
+-      evaluateEndState(now);
++        ctx.fillStyle = hovered ? '#eff6ff' : '#f8fafc';
++        drawRoundedRect(ctx, x + 10, rowY, w - 20, rowH, 10);
++
++        const dept = findDepartmentById(req.type);
++        ctx.fillStyle = dept ? dept.color : '#64748b';
++        drawRoundedRect(ctx, x + 14, rowY + 8, 10, rowH - 16, 5);
++
++        ctx.fillStyle = '#0f172a';
++        ctx.font = 'bold 13px Inter';
++        const pref = req.vip ? 'VIP • ' : req.urgent ? 'URGENT • ' : '';
++        ctx.fillText(`${pref}${req.label}`, x + 32, rowY + 18);
++        ctx.font = '12px Inter';
++        ctx.fillStyle = '#334155';
++        ctx.fillText(`Needs: ${dept ? dept.name : req.type}`, x + 32, rowY + 34);
++
++        const barW = 140;
++        const bx = x + w - barW - 20;
++        ctx.fillStyle = '#cbd5e1';
++        drawRoundedRect(ctx, bx, rowY + 13, barW, 12, 6);
++        ctx.fillStyle = nearExpiry ? '#ef4444' : '#22c55e';
++        drawRoundedRect(ctx, bx, rowY + 13, barW * fraction, 12, 6);
++        ctx.fillStyle = '#0f172a';
++        ctx.font = '11px Inter';
++        ctx.fillText(`${Math.ceil(remain / 1000)}s`, bx + barW + 6, rowY + 23);
++      });
+     }
+ 
+     function draw() {
+-      const now = performance.now();
+-      const timeLeft = getTimeLeft(now);
+-      const timeRatio = clamp(timeLeft / SHIFT_MS, 0, 1);
++      const now = nowMs();
++      const elapsed = now - state.shiftStart;
++      const left = getTimeLeft(now);
+ 
+       const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+-      bgGrad.addColorStop(0, '#eef7ff');
++      bgGrad.addColorStop(0, '#dcfce7');
+       bgGrad.addColorStop(1, '#dbeafe');
+       ctx.fillStyle = bgGrad;
+       ctx.fillRect(0, 0, canvas.width, canvas.height);
+ 
+       ctx.fillStyle = '#0f172a';
+-      ctx.font = 'bold 26px Inter';
+-      ctx.fillText('Club Manager: Score Rush', 30, 48);
+-      ctx.font = '14px Inter';
+-      ctx.fillStyle = '#334155';
+-      ctx.fillText(`Goal: Reach ${GOAL_SCORE} score before 90s while avoiding 8 tee delays.`, 30, 72);
+-
+-      drawRoundedRect(ctx, 420, 20, canvas.width - 460, 120, 14);
+-      ctx.fillStyle = '#f8fafc';
+-      ctx.fillRect(422, 22, canvas.width - 464, 116);
+-      ctx.fillStyle = '#0f172a';
+-      ctx.font = 'bold 16px Inter';
+-      ctx.fillText(`Score: ${Math.round(resources.score)} / ${GOAL_SCORE}`, 438, 48);
++      ctx.font = 'bold 24px Inter';
++      ctx.fillText('Club Manager: Dispatch Crisis', 26, 42);
+       ctx.font = '13px Inter';
+       ctx.fillStyle = '#334155';
+-      ctx.fillText(`Reputation: ${Math.round(resources.reputation)}%`, 438, 70);
+-      ctx.fillText(`Cash: $${Math.round(resources.cash)}   Combo: x${resources.combo}`, 438, 90);
+-      ctx.fillText(`Tee Delays: ${resources.teeDelays}/8   Served: ${resources.servedGuests}`, 438, 110);
+-
+-      ctx.fillStyle = '#cbd5e1';
+-      drawRoundedRect(ctx, 30, 90, canvas.width - 60, 14, 7);
+-      ctx.fillStyle = '#0ea5e9';
+-      drawRoundedRect(ctx, 30, 90, (canvas.width - 60) * timeRatio, 14, 7);
+-
+-      const scoreRatio = clamp(resources.score / GOAL_SCORE, 0, 1);
+-      ctx.fillStyle = '#cbd5e1';
+-      drawRoundedRect(ctx, 30, 112, canvas.width - 60, 10, 6);
+-      ctx.fillStyle = '#22c55e';
+-      drawRoundedRect(ctx, 30, 112, (canvas.width - 60) * scoreRatio, 10, 6);
+-
+-      departments.forEach((dept, idx) => {
+-        const req = activeRequests.find(r => r.type === dept.id);
+-        const cooling = now < dept.cooldownUntil;
+-        const offsetY = idx * 2;
+-
+-        ctx.fillStyle = '#ffffff';
+-        drawRoundedRect(ctx, dept.x, dept.y + offsetY, dept.w, dept.h, 14);
++      ctx.fillText('Keep requests moving, protect reputation, and hit the target before end of shift.', 26, 62);
++
++      ctx.fillStyle = '#ffffffd8';
++      drawRoundedRect(ctx, 26, 76, canvas.width - 52, 64, 14);
++      const rushText = isRush(now) ? 'RUSH HOUR ACTIVE (x2 cash + score)' : `Next Rush Hour in ${Math.ceil(Math.max(0, state.rushTimer) / 1000)}s`;
++      const delays = Math.max(0, Math.round(state.teeDelays));
++      const topStats = [
++        `Time ${Math.ceil(left / 1000)}s`,
++        `Score ${Math.round(state.score)}/${GOAL_SCORE}`,
++        `Rep ${Math.round(state.reputation)}`,
++        `Energy ${Math.round(state.staffEnergy)}`,
++        `Cash $${Math.round(state.cash)}`,
++        `Combo x${1 + Math.min(1.2, state.combo * 0.05).toFixed(2)} (${state.combo})`,
++        `Delays ${delays}/${LOSE_DELAY_CAP}`
++      ];
++      ctx.fillStyle = '#0f172a';
++      ctx.font = 'bold 13px Inter';
++      topStats.forEach((t, i) => {
++        ctx.fillText(t, 40 + i * 145, 102);
++      });
++      ctx.fillStyle = isRush(now) ? '#b91c1c' : '#1d4ed8';
++      ctx.font = 'bold 13px Inter';
++      ctx.fillText(rushText, 40, 124);
++
++      departments.forEach((dept) => {
++        const selected = state.selectedDeptId === dept.id;
++        const busy = now < dept.cooldownUntil;
++        const panelY = dept.y;
++
++        ctx.fillStyle = selected ? '#ecfeff' : '#ffffff';
++        drawRoundedRect(ctx, dept.x, panelY, dept.w, dept.h, 14);
+         ctx.fillStyle = dept.color;
+-        drawRoundedRect(ctx, dept.x + 10, dept.y + 10 + offsetY, 10, dept.h - 20, 6);
++        drawRoundedRect(ctx, dept.x + 10, panelY + 12, 10, dept.h - 24, 6);
+ 
+         ctx.fillStyle = '#0f172a';
+         ctx.font = 'bold 16px Inter';
+-        ctx.fillText(dept.name, dept.x + 30, dept.y + 30 + offsetY);
++        ctx.fillText(dept.name, dept.x + 30, panelY + 28);
+         ctx.font = '12px Inter';
+         ctx.fillStyle = '#475569';
+-        ctx.fillText(dept.serviceText, dept.x + 30, dept.y + 48 + offsetY);
+-
+-        if (req) {
+-          const remain = Math.max(0, req.expiresAt - now);
+-          const urgencyColor = remain < 4500 ? '#ef4444' : '#2563eb';
+-          ctx.fillStyle = urgencyColor;
+-          ctx.font = 'bold 13px Inter';
+-          ctx.fillText(`${req.vip ? 'VIP • ' : ''}${req.label}`, dept.x + 30, dept.y + 70 + offsetY);
+-
+-          const barW = 128;
+-          ctx.fillStyle = '#cbd5e1';
+-          drawRoundedRect(ctx, dept.x + dept.w - barW - 14, dept.y + 60 + offsetY, barW, 10, 5);
+-          ctx.fillStyle = urgencyColor;
+-          drawRoundedRect(ctx, dept.x + dept.w - barW - 14, dept.y + 60 + offsetY, barW * clamp(remain / 18000, 0, 1), 10, 5);
++        ctx.fillText(dept.serviceText, dept.x + 30, panelY + 46);
++        ctx.fillText(`Speed ${(dept.efficiency * 100).toFixed(0)}%`, dept.x + 30, panelY + 63);
++        if (busy) {
++          const remain = Math.max(0, dept.cooldownUntil - now);
++          ctx.fillStyle = '#7c3aed';
++          ctx.font = 'bold 12px Inter';
++          ctx.fillText(`Busy ${Math.ceil(remain / 1000)}s`, dept.x + 30, panelY + 80);
+         } else {
+-          ctx.fillStyle = '#94a3b8';
+-          ctx.font = '13px Inter';
+-          ctx.fillText('Ready for next guest', dept.x + 30, dept.y + 70 + offsetY);
++          ctx.fillStyle = '#16a34a';
++          ctx.font = 'bold 12px Inter';
++          ctx.fillText('Ready', dept.x + 30, panelY + 80);
+         }
+-
+-        if (cooling) {
+-          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+-          drawRoundedRect(ctx, dept.x, dept.y + offsetY, dept.w, dept.h, 14);
+-          ctx.fillStyle = '#fff';
+-          ctx.font = 'bold 13px Inter';
+-          ctx.fillText('Handling...', dept.x + dept.w - 95, dept.y + 30 + offsetY);
++        if (selected) {
++          ctx.strokeStyle = '#0ea5e9';
++          ctx.lineWidth = 2;
++          ctx.strokeRect(dept.x + 1, panelY + 1, dept.w - 2, dept.h - 2);
+         }
+       });
+ 
+-      ctx.fillStyle = '#0f172a';
+-      ctx.font = '12px Inter';
+-      const rushText = isRush(now) ? 'RUSH HOUR ACTIVE: 2x score/cash!' : `Rush Hour in ${Math.ceil(Math.max(0, rushTimer) / 1000)}s`;
+-      ctx.fillText(rushText, 30, canvas.height - 40);
+-      if (nextUpgradeIndex < upgrades.length) {
+-        const up = upgrades[nextUpgradeIndex];
+-        ctx.fillText(`Next auto-upgrade: ${up.name} ($${up.cost})`, 30, canvas.height - 22);
++      drawQueue(now);
++
++      if (state.nextUpgradeIndex < upgrades.length) {
++        const up = upgrades[state.nextUpgradeIndex];
++        ctx.fillStyle = '#0f172a';
++        ctx.font = '12px Inter';
++        ctx.fillText(`Next auto-upgrade: ${up.name} ($${up.cost})`, 32, canvas.height - 10);
+       }
+ 
+-      if (overlayMsg && now < overlayUntil) {
++      if (state.overlayMsg && now < state.overlayUntil) {
+         ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+-        drawRoundedRect(ctx, 30, canvas.height - 92, canvas.width - 60, 44, 10);
++        drawRoundedRect(ctx, 30, canvas.height - 96, canvas.width - 60, 48, 12);
+         ctx.fillStyle = '#fff';
+         ctx.font = '14px Inter';
+         ctx.textAlign = 'center';
+-        ctx.fillText(overlayMsg, canvas.width / 2, canvas.height - 64);
++        ctx.fillText(state.overlayMsg, canvas.width / 2, canvas.height - 66);
++        ctx.textAlign = 'left';
++      }
++
++      if (state.shiftOver) {
++        ctx.fillStyle = 'rgba(2, 6, 23, 0.58)';
++        ctx.fillRect(0, 0, canvas.width, canvas.height);
++        ctx.fillStyle = '#fff';
++        ctx.textAlign = 'center';
++        ctx.font = 'bold 38px Inter';
++        ctx.fillText(state.shiftWon ? 'Shift Cleared!' : 'Shift Failed', canvas.width / 2, canvas.height / 2 - 44);
++        ctx.font = '18px Inter';
++        const reason = state.shiftWon
++          ? `Final score ${Math.round(state.score)} with best combo ${state.bestCombo}.`
++          : (left <= 0 ? 'Time ran out.' : (state.reputation <= 0 ? 'Reputation collapsed.' : 'Tee delays spiraled.'));
++        ctx.fillText(reason, canvas.width / 2, canvas.height / 2 - 10);
++        ctx.fillText('Click anywhere to restart the shift.', canvas.width / 2, canvas.height / 2 + 24);
+         ctx.textAlign = 'left';
+       }
+     }
+ 
++    function findHoveredRequest(x, y) {
++      const panelX = 398;
++      const panelY = 154;
++      const w = canvas.width - panelX - 26;
++      const rowH = 42;
++      const startY = panelY + 56;
++      for (let i = 0; i < Math.min(9, state.queue.length); i += 1) {
++        const ry = startY + i * (rowH + 8);
++        if (x >= panelX + 10 && x <= panelX + w - 10 && y >= ry && y <= ry + rowH) {
++          return state.queue[i];
++        }
++      }
++      return null;
++    }
++
+     function onMouseDown(m) {
+-      const now = nowMs();
+-      if (shiftOver) {
++      if (state.shiftOver) {
+         resetState();
+         return;
+       }
+ 
+       for (const dept of departments) {
+         if (m.x >= dept.x && m.x <= dept.x + dept.w && m.y >= dept.y && m.y <= dept.y + dept.h) {
+-          selectedDeptId = dept.id;
++          state.selectedDeptId = dept.id;
+           return;
+         }
+       }
+ 
+-      if (m.x >= 420 && m.x <= canvas.width - 40 && m.y >= 20 && m.y <= 140) {
+-        showOverlay(`Time left: ${Math.ceil(getTimeLeft(now) / 1000)}s | Score: ${Math.round(resources.score)}/${GOAL_SCORE}`, 1100);
++      const clickedReq = findHoveredRequest(m.x, m.y);
++      if (!clickedReq) return;
++      if (!state.selectedDeptId) {
++        showOverlay('Select a department first, then dispatch a request.', 1100);
++        return;
+       }
++
++      const dept = findDepartmentById(state.selectedDeptId);
++      if (!dept) return;
++
++      const reqIndex = state.queue.findIndex(r => r.id === clickedReq.id);
++      if (reqIndex < 0) return;
++      const req = state.queue.splice(reqIndex, 1)[0];
++      completeRequest(req, dept, nowMs());
+     }
+ 
+-    function onStart() {
+-      hudWorld.textContent = 'Club Manager';
+-      hudSub.textContent = 'Clear requests fast and hit the score goal before time runs out.';
+-      setInstructions('Club Manager Goal & Controls', [
+-        `Goal: Reach ${GOAL_SCORE} score within 90 seconds.`,
+-        'Click a department to serve its current request and build combo multipliers.',
+-        'Missing requests hurts reputation and can add tee delays (8 delays = loss).',
+-        'Every 24 seconds, Rush Hour gives 2x score and cash for 8 seconds.',
+-        'Buyable upgrades happen automatically when you have enough cash.'
+-      ]);
+-      statusPill.textContent = 'Score rush';
+-      resetState();
++    function onMouseMove(m) {
++      const hovered = findHoveredRequest(m.x, m.y);
++      state.hoveredRequestId = hovered ? hovered.id : null;
+     }
+ 
+     function onMouseUp() {}
+-    function onKeyDown() {}
++    function onKeyDown(code) {
++      if (code === 'KeyR' && state.shiftOver) resetState();
++    }
+     function onKeyUp() {}
+     function onResize() {}
+     function onStop() {}
+ 
+     function onStart() {
+       hudWorld.textContent = 'Club Manager';
+-      hudSub.textContent = 'Run dispatch under pressure: pick a desk, then route the right request before it expires.';
+-      setInstructions('Club Manager Controls', [
+-        `Goal: reach ${GOAL_SCORE} score in 90 seconds.`,
+-        'Step 1: Click a department card to select it.',
+-        'Step 2: Click a matching request in the queue to dispatch it.',
+-        'Wrong routing hurts reputation; expired requests add misses and delays.',
+-        'Use Call Overtime to stabilize when things get chaotic.'
++      hudSub.textContent = 'Dispatch under pressure: select desk, route request, survive escalating chaos.';
++      setInstructions('Club Manager Goal & Controls', [
++        `Goal: reach ${GOAL_SCORE} score before ${Math.round(SHIFT_MS / 1000)} seconds end.`,
++        'Click a department card (left), then click a queue item (right) to dispatch.',
++        'Requests have timers: expired tasks hurt reputation and add tee delays.',
++        'Wrong department routing also causes penalties and breaks your combo.',
++        'Rush Hour appears throughout the shift for temporary 2x rewards.',
++        'Lose if reputation hits 0 or delays reach 10. Click screen to restart.'
+       ]);
+-      statusPill.textContent = 'Dispatch desk';
++      statusPill.textContent = 'Dispatch crisis';
+       resetState();
+     }
+ 
+     function getAdminControls() {
+       return [
+         { id: 'boost-rep', label: '🌟 +20 reputation' },
+-        { id: 'add-cash', label: '💵 +$800 cash' },
++        { id: 'add-cash', label: '💵 +$1000 cash' },
+         { id: 'spawn-vip', label: '🎟️ Spawn VIP request' },
+         { id: 'rush-now', label: '⚡ Trigger Rush Hour' }
+       ];
+     }
+ 
+     function runAdminAction(actionId) {
+       if (actionId === 'boost-rep') {
+-        resources.reputation = Math.min(100, resources.reputation + 20);
++        state.reputation = Math.min(100, state.reputation + 20);
+         showOverlay('Admin: reputation boosted.', 1000);
+       }
+       if (actionId === 'add-cash') {
+-        resources.cash += 800;
++        state.cash += 1000;
+         maybeBuyUpgrade();
+       }
+       if (actionId === 'spawn-vip') {
+         spawnRequest(true);
+         showOverlay('Admin: VIP request spawned.', 1000);
+       }
+       if (actionId === 'rush-now') {
+         triggerRush();
+       }
+     }
+ 
+     function loop(now = nowMs()) {
+       if (!currentWorld || currentWorld.id !== 'manager') return;
+-      const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
+-      lastTick = now;
++      const dt = state.lastTick ? Math.min(now - state.lastTick, 40) : 16.67;
++      state.lastTick = now;
+       update(now, dt);
+       draw();
+       animationFrameId = requestAnimationFrame(loop);
+     }
+ 
+-    return { id:'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop, getAdminControls, runAdminAction };
++    return { id: 'manager', onStart, onStop, onMouseDown, onMouseMove, onMouseUp, onResize, onKeyDown, onKeyUp, loop, getAdminControls, runAdminAction };
+   }
+ 
+ 
++
+   /* ===========================
+      World dispatching & startup
+      =========================== */
+ 
+   // world instances cached
+   const worldConstructors = {
+     'pro': createProGolferWorld,
+     'designer': createDesignerWorld,
+     'greens': createGreenskeeperWorld,
+     'caddy': createCaddyWorld,
+     'manager': createManagerWorld
+   };
+ 
+   function startWorld(id) {
+     if (!worldConstructors[id]) {
+       console.warn('No constructor for', id);
+       return;
+     }
+     statusPill.textContent = 'Loading...';
+     stopCurrentWorld();
+     // create new instance
+     const world = worldConstructors[id]();
+     currentWorld = world;
+     currentWorld.id = id;
+     // start-up
