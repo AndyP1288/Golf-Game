@@ -1656,7 +1656,6 @@ function createCaddyWorld() {
       reputation: 70,
       staffEnergy: 100,
       teeDelays: 0,
-      servedGuests: 0,
       combo: 0,
       bestCombo: 0,
       score: 0,
@@ -1686,7 +1685,6 @@ function createCaddyWorld() {
       { type: 'starter', label: 'VIP group arrived early', rewardCash: 160, rewardRep: 12, rewardScore: 72, penaltyRep: 12, penaltyDelay: 1, vip: true }
     ];
 
-    let activeRequests = [];
     let shiftStart = 0;
     let shiftOver = false;
     let shiftWon = false;
@@ -1702,16 +1700,15 @@ function createCaddyWorld() {
       resources.reputation = 70;
       resources.staffEnergy = 100;
       resources.teeDelays = 0;
-      resources.servedGuests = 0;
       resources.combo = 0;
       resources.bestCombo = 0;
       resources.score = 0;
       resources.rushUntil = 0;
       departments.forEach(d => {
-        d.efficiency = 1;
         d.cooldownUntil = 0;
+        d.efficiency = 1;
       });
-      activeRequests = [];
+      shiftStart = nowMs();
       shiftOver = false;
       shiftWon = false;
       overlayMsg = '';
@@ -1728,9 +1725,17 @@ function createCaddyWorld() {
       return Math.max(0, SHIFT_MS - (now - shiftStart));
     }
 
-    function showOverlay(text, ms = 1300) {
+    function isRush(now = nowMs()) {
+      return now < resources.rushUntil;
+    }
+
+    function hasDispatchBoost(now = nowMs()) {
+      return now < resources.dispatchBoostUntil;
+    }
+
+    function showOverlay(text, ms = 1200) {
       overlayMsg = text;
-      overlayUntil = performance.now() + ms;
+      overlayUntil = nowMs() + ms;
     }
 
     function isRush(now = performance.now()) {
@@ -1752,8 +1757,9 @@ function createCaddyWorld() {
         rewardScore: template.rewardScore,
         penaltyRep: template.penaltyRep,
         penaltyDelay: template.penaltyDelay,
+        urgent: Boolean(template.urgent),
         vip: Boolean(template.vip),
-        expiresAt: performance.now() + urgency
+        expiresAt: nowMs() + patience
       });
     }
 
@@ -1779,14 +1785,36 @@ function createCaddyWorld() {
       resources.combo = 0;
     }
 
-    function serveDepartment(deptId) {
-      if (shiftOver) return;
-      const now = performance.now();
-      const dept = departments.find(d => d.id === deptId);
-      if (!dept || now < dept.cooldownUntil) return;
+    function penaltyForMiss(req) {
+      resources.reputation = Math.max(0, resources.reputation - req.penaltyRep);
+      resources.teeDelays += req.penaltyDelay;
+      resources.staffEnergy = Math.max(0, resources.staffEnergy - 6);
+      resources.combo = 0;
+      resources.missed += 1;
+    }
 
-      const reqIndex = activeRequests.findIndex(r => r.type === deptId);
-      if (reqIndex === -1) {
+    function findDepartmentById(id) {
+      return departments.find(d => d.id === id) || null;
+    }
+
+    function routeRequest(requestId) {
+      if (!selectedDeptId || shiftOver) {
+        showOverlay('Select a department first, then assign a request.', 900);
+        return;
+      }
+      const dept = findDepartmentById(selectedDeptId);
+      const now = nowMs();
+      if (!dept) return;
+      if (now < dept.cooldownUntil) {
+        showOverlay(`${dept.name} is busy. Pick another desk or wait.`, 900);
+        return;
+      }
+
+      const idx = activeRequests.findIndex(r => r.id === requestId);
+      if (idx === -1) return;
+      const req = activeRequests[idx];
+
+      if (req.type !== dept.id) {
         resources.combo = 0;
         resources.staffEnergy = Math.max(0, resources.staffEnergy - 4);
         showOverlay(`${dept.name} had no waiting request. You lost momentum.`, 1000);
@@ -1794,8 +1822,11 @@ function createCaddyWorld() {
         return;
       }
 
-      const req = activeRequests[reqIndex];
-      activeRequests.splice(reqIndex, 1);
+      activeRequests.splice(idx, 1);
+      const rushMult = isRush(now) ? 1.9 : 1;
+      const comboMult = 1 + Math.min(0.9, resources.combo * 0.1);
+      const urgencyBonus = req.urgent ? 1.15 : 1;
+      const boostMult = hasDispatchBoost(now) ? 1.15 : 1;
 
       const comboMult = 1 + Math.min(0.8, resources.combo * 0.08);
       const rushMult = isRush(now) ? 2 : 1;
@@ -1981,7 +2012,7 @@ function createCaddyWorld() {
     }
 
     function onMouseDown(m) {
-      const now = performance.now();
+      const now = nowMs();
       if (shiftOver) {
         resetState();
         return;
@@ -1989,7 +2020,7 @@ function createCaddyWorld() {
 
       for (const dept of departments) {
         if (m.x >= dept.x && m.x <= dept.x + dept.w && m.y >= dept.y && m.y <= dept.y + dept.h) {
-          serveDepartment(dept.id);
+          selectedDeptId = dept.id;
           return;
         }
       }
@@ -2013,12 +2044,25 @@ function createCaddyWorld() {
       resetState();
     }
 
-    function onStop() {}
-    function onMouseMove() {}
     function onMouseUp() {}
     function onKeyDown() {}
     function onKeyUp() {}
     function onResize() {}
+    function onStop() {}
+
+    function onStart() {
+      hudWorld.textContent = 'Club Manager';
+      hudSub.textContent = 'Run dispatch under pressure: pick a desk, then route the right request before it expires.';
+      setInstructions('Club Manager Controls', [
+        `Goal: reach ${GOAL_SCORE} score in 90 seconds.`,
+        'Step 1: Click a department card to select it.',
+        'Step 2: Click a matching request in the queue to dispatch it.',
+        'Wrong routing hurts reputation; expired requests add misses and delays.',
+        'Use Call Overtime to stabilize when things get chaotic.'
+      ]);
+      statusPill.textContent = 'Dispatch desk';
+      resetState();
+    }
 
     function getAdminControls() {
       return [
@@ -2047,7 +2091,7 @@ function createCaddyWorld() {
       }
     }
 
-    function loop(now = performance.now()) {
+    function loop(now = nowMs()) {
       if (!currentWorld || currentWorld.id !== 'manager') return;
       const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
       lastTick = now;
