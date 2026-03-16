@@ -323,7 +323,8 @@ Object.values(tiles).forEach(tile => {
 });
 
 // Stopping current world (cleanup)
-function stopCurrentWorld() {
+function stopCurrentWorld(options = {}) {
+  const clearCanvas = options.clearCanvas !== false;
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
@@ -331,7 +332,7 @@ function stopCurrentWorld() {
   if (currentWorld && currentWorld.onStop) currentWorld.onStop();
   currentWorld = null;
   // clear canvas
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (clearCanvas) ctx.clearRect(0,0,canvas.width,canvas.height);
   if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
 }
 
