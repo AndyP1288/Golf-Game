@@ -1748,10 +1748,11 @@ function createCaddyWorld() {
       resources.combo = 0;
     }
 
-    function triggerRush(now = performance.now()) {
-      resources.rushUntil = now + 8000;
-      showOverlay('Rush Hour! Correct routing gives 2x score/cash for 8s.', 1800);
-    }
+    function serveDepartment(deptId) {
+      if (shiftOver) return;
+      const now = performance.now();
+      const dept = departments.find(d => d.id === deptId);
+      if (!dept || now < dept.cooldownUntil) return;
 
       const reqIndex = activeRequests.findIndex(r => r.type === deptId);
       if (reqIndex === -1) {
@@ -1762,13 +1763,8 @@ function createCaddyWorld() {
         return;
       }
 
-    function resolveCorrectAssignment(req, dept, now) {
-      const comboMult = 1 + Math.min(0.9, resources.combo * 0.1);
-      const rushMult = isRush(now) ? 2 : 1;
-      const vipBonus = req.vip ? 12 : 0;
-      const scoreGain = Math.round((req.rewardScore + vipBonus) * comboMult * rushMult);
-      const cashGain = Math.round(req.rewardCash * comboMult * rushMult);
-      const repGain = Math.round((req.rewardRep + Math.min(6, resources.combo)) * rushMult);
+      const req = activeRequests[reqIndex];
+      activeRequests.splice(reqIndex, 1);
 
       const comboMult = 1 + Math.min(0.8, resources.combo * 0.08);
       const rushMult = isRush(now) ? 2 : 1;
@@ -1972,20 +1968,6 @@ function createCaddyWorld() {
       }
     }
 
-    function onMouseMove(m) {
-      dragMouse.x = m.x;
-      dragMouse.y = m.y;
-    }
-
-    function onMouseUp(m) {
-      if (!draggingRequestId || shiftOver) {
-        draggingRequestId = null;
-        return;
-      }
-      onDropRequest(draggingRequestId, m.x, m.y, performance.now());
-      draggingRequestId = null;
-    }
-
     function onStart() {
       hudWorld.textContent = 'Club Manager';
       hudSub.textContent = 'Clear requests fast and hit the score goal before time runs out.';
@@ -2001,6 +1983,8 @@ function createCaddyWorld() {
     }
 
     function onStop() {}
+    function onMouseMove() {}
+    function onMouseUp() {}
     function onKeyDown() {}
     function onKeyUp() {}
     function onResize() {}
