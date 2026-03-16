@@ -192,6 +192,36 @@ resizeCanvas();
 let currentWorld = null;
 let animationFrameId = null;
 let mouse = { x: 0, y: 0, down: false };
+
+function renderIdleSplash(message = 'Choose a world tile and press Play to begin.') {
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#ecfeff');
+  grad.addColorStop(1, '#dbeafe');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 32px Inter';
+  ctx.fillText('Golf Worlds', canvas.width / 2, canvas.height / 2 - 24);
+  ctx.font = '15px Inter';
+  ctx.fillStyle = '#334155';
+  ctx.fillText(message, canvas.width / 2, canvas.height / 2 + 10);
+  ctx.fillText('Tip: Club Manager is in the world list (scroll if needed).', canvas.width / 2, canvas.height / 2 + 36);
+  ctx.textAlign = 'left';
+}
+
+function renderStartupError(err) {
+  renderIdleSplash('A world failed to start. See console for details.');
+  const text = (err && err.message) ? err.message : String(err || 'Unknown error');
+  ctx.fillStyle = 'rgba(127, 29, 29, 0.9)';
+  drawRoundedRect(ctx, 28, 28, canvas.width - 56, 76, 10);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px Inter';
+  ctx.fillText('World startup error', 44, 56);
+  ctx.font = '12px Inter';
+  ctx.fillText(text.slice(0, 160), 44, 78);
+}
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -276,6 +306,7 @@ function showMenu() {
   if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
   // stop any world
   stopCurrentWorld();
+  renderIdleSplash();
 }
 
 Object.values(tiles).forEach(tile => {
@@ -2099,13 +2130,26 @@ function createCaddyWorld() {
     currentWorld.id = id;
     // start-up
     resizeCanvas(); // ensure right sizes
-    if (currentWorld.onStart) currentWorld.onStart();
+    try {
+      if (currentWorld.onStart) currentWorld.onStart();
+    } catch (err) {
+      console.error('World onStart failed:', err);
+      renderStartupError(err);
+      stopCurrentWorld();
+      return;
+    }
     if (!adminConsole.classList.contains('hidden')) renderAdminConsole();
     // Start animation
     (function run() {
       if (!currentWorld) return;
-      if (currentWorld.loop) currentWorld.loop();
-      else animationFrameId = requestAnimationFrame(run);
+      try {
+        if (currentWorld.loop) currentWorld.loop();
+        else animationFrameId = requestAnimationFrame(run);
+      } catch (err) {
+        console.error('World loop failed:', err);
+        renderStartupError(err);
+        stopCurrentWorld();
+      }
     })();
   }
 
