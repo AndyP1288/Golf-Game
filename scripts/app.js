@@ -1667,7 +1667,10 @@ function createManagerWorld() {
     dispatchBoostUntil: 0
   };
 
-  const departments = [
+ function draw() {
+  console.log("DRAWING FRAME"); // 👈 add this
+    
+   const departments = [
     { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 40, y: 132, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Gear repairs, fittings, and last-minute purchases.' },
     { id: 'starter', name: 'Starter Desk', color: '#10b981', x: 40, y: 244, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Tee-sheet flow, pairings, and pace-of-play issues.' },
     { id: 'lounge', name: 'Club Lounge', color: '#f59e0b', x: 40, y: 356, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Food, drinks, events, and member hospitality.' }
