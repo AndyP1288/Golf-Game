@@ -1878,7 +1878,12 @@ function createManagerWorld() {
     lastTick = now;
     update(now, dt);
     draw();
-    requestAnimationFrame(loop);
+function loop(now = nowMs()) {
+  const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
+  lastTick = now;
+  update(now, dt);
+  draw();
+}
   }
 
   return {
