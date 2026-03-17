@@ -1870,18 +1870,19 @@ function createManagerWorld() {
   }
 
  function draw() {
-  // Background (force visible)
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // DO NOT clear whole screen
+  // DO NOT fill whole screen
 
-  // Text
+  // Draw a panel instead
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(30, 40, 320, 120);
+
   ctx.fillStyle = "white";
-  ctx.font = "24px Arial";
+  ctx.font = "18px Arial";
 
   ctx.fillText("Manager World Running", 50, 80);
-  ctx.fillText("Score: " + resources.score, 50, 120);
+  ctx.fillText("Score: " + resources.score, 50, 110);
 }
-  }
 
   function onMouseDown() {}
 
