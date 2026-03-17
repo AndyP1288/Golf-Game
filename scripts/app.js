@@ -1896,17 +1896,16 @@ function draw() {
   }
 
   function loop(now = nowMs()) {
-    const dt = lastTick ? now - lastTick : 16;
-    lastTick = now;
-    update(now, dt);
-    draw();
-function loop(now = nowMs()) {
+  if (!currentWorld || currentWorld.id !== 'manager') return;
+
   const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
   lastTick = now;
+
   update(now, dt);
   draw();
+
+  animationFrameId = requestAnimationFrame(loop);
 }
-  }
 
   return {
     id: 'manager',
