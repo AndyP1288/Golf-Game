@@ -19,7 +19,7 @@
 /* ============================
    Utility / Polyfills & Setup
    ============================ */
-
+alert("JS IS RUNNING");
 (() => {
   'use strict';
 
