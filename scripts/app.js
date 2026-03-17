@@ -1685,9 +1685,6 @@ function createManagerWorld() {
     dispatchBoostUntil: 0
   };
 
-function draw() {
-  console.log("DRAWING FRAME");
-}
     
    const departments = [
     { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 40, y: 132, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Gear repairs, fittings, and last-minute purchases.' },
@@ -1872,12 +1869,18 @@ function draw() {
     if (resources.reputation <= 0) shiftOver = true;
   }
 
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+ function draw() {
+  // Background (force visible)
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = "black";
-    ctx.fillText("Manager World Running", 50, 50);
-    ctx.fillText("Score: " + resources.score, 50, 80);
+  // Text
+  ctx.fillStyle = "white";
+  ctx.font = "24px Arial";
+
+  ctx.fillText("Manager World Running", 50, 80);
+  ctx.fillText("Score: " + resources.score, 50, 120);
+}
   }
 
   function onMouseDown() {}
