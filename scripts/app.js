@@ -1896,6 +1896,8 @@ function draw() {
   }
 
   function loop(now = nowMs()) {
+  console.log("LOOP RUNNING"); // 👈 ADD THIS LINE
+
   if (!currentWorld || currentWorld.id !== 'manager') return;
 
   const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
