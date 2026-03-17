@@ -1855,12 +1855,15 @@ function draw() {
   }
 
   function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  console.log("DRAW WORKING");
 
-    ctx.fillStyle = "black";
-    ctx.fillText("Manager World Running", 50, 50);
-    ctx.fillText("Score: " + resources.score, 50, 80);
-  }
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText("Manager World Loaded", 50, 50);
+}
 
   function onMouseDown() {}
 
