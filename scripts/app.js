@@ -19,7 +19,25 @@
 /* ============================
    Utility / Polyfills & Setup
    ============================ */
-alert("JS IS RUNNING");
+function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
+}
+
+function drawRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
 (() => {
   'use strict';
 
@@ -1855,15 +1873,12 @@ function draw() {
   }
 
   function draw() {
-  console.log("DRAW WORKING");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = "white";
-  ctx.font = "20px Arial";
-  ctx.fillText("Manager World Loaded", 50, 50);
-}
+    ctx.fillStyle = "black";
+    ctx.fillText("Manager World Running", 50, 50);
+    ctx.fillText("Score: " + resources.score, 50, 80);
+  }
 
   function onMouseDown() {}
 
