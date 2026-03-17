@@ -1667,8 +1667,9 @@ function createManagerWorld() {
     dispatchBoostUntil: 0
   };
 
- function draw() {
-  console.log("DRAWING FRAME"); // 👈 add this
+function draw() {
+  console.log("DRAWING FRAME");
+}
     
    const departments = [
     { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 40, y: 132, w: 340, h: 90, efficiency: 1, cooldownUntil: 0, serviceText: 'Gear repairs, fittings, and last-minute purchases.' },
