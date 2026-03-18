@@ -41,7 +41,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 (() => {
   'use strict';
 
-  // Create root element if not already present
+  // Build the app root if the page does not already have one
   const existingRoot = document.getElementById('app-root');
   const root = existingRoot || (function () {
     const r = document.createElement('div');
@@ -50,7 +50,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     return r;
   })();
 
-  // Basic stylesheet injection for overlay UI
+  // Shared UI styles
   const style = document.createElement('style');
   style.textContent = `
     :root{--bg:#e7f4f2;--panel:#ffffffcc;--accent:#00695c;--muted:#6b6b6b}
@@ -100,11 +100,11 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
    Global Canvas & Systems
    ========================= */
 
-// Create canvas area inside panel
+// Main app panel
 const panel = document.createElement('div');
 panel.className = 'panel';
 
-// Left column: menu / world list
+// Left column: world list
 const left = document.createElement('div');
 left.className = 'menu-col'; // <-- scrollable now
 left.style.overflowY = 'auto'; // Added scroll
@@ -134,7 +134,7 @@ const worlds = [
   { id: 'manager', name: 'Club Manager', summary: 'Run a chaotic clubhouse shift: triage requests, chain combos, and keep members thrilled.', color: '#e6d1ff', image: 'Assets/images/clubmanager.png' }
 ];
 
-// Tile factory
+// Build menu tiles
 const tiles = {};
 worlds.forEach(w => {
   const tile = document.createElement('div');
@@ -153,7 +153,7 @@ worlds.forEach(w => {
   tiles[w.id] = tile;
 });
 
-// Right column: canvas + HUD
+// Right column: shared UI + canvas
 const right = document.createElement('div');
 right.className = 'canvas-wrap';
 
@@ -207,7 +207,7 @@ panel.appendChild(left);
 panel.appendChild(right);
 root.appendChild(panel);
 
-// Responsive canvas sizing logic
+// Size the canvas to the visible stage
 const ctx = canvas.getContext('2d');
 function resizeCanvas() {
   // physical size equals drawable stage size for crisp drawing
@@ -222,7 +222,7 @@ window.addEventListener('resize', () => {
 
 resizeCanvas();
 
-// Global game state
+// Shared runtime state
 let currentWorld = null;
 let animationFrameId = null;
 let mouse = { x: 0, y: 0, down: false };
@@ -1682,7 +1682,7 @@ function createCaddyWorld() {
 
 
  /* ===========================
-   World: Club Manager (Fixed)
+   World: Club Manager
    =========================== */
 function createManagerWorld() {
   const SHIFT_MS = 90000;
