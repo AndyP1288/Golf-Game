@@ -18,27 +18,51 @@
         <h2>Golfer</h2>
         <p>Play as the golfer. Master timing and precision to make par.</p>
       </div>
+
       <div class="world-card" data-game="groundskeeper">
         <div class="world-thumb" aria-hidden="true">🌱</div>
         <h2>Groundskeeper</h2>
         <p>Keep the greens alive! Manage water flow before it dries up.</p>
       </div>
+
       <div class="world-card" data-game="designer">
         <div class="world-thumb" aria-hidden="true">🧩</div>
         <h2>Course Designer</h2>
         <p>Design your own golf course with sand, water, and green brushes.</p>
       </div>
+
       <div class="world-card" data-game="manager">
         <div class="world-thumb" aria-hidden="true">📅</div>
         <h2>Club Manager</h2>
         <p>Manage the clubhouse, balance budgets, and keep golfers happy.</p>
       </div>
+
       <div class="world-card" data-game="caddy">
         <div class="world-thumb" aria-hidden="true">🎒</div>
         <h2>Caddy Dash</h2>
         <p>Run and jump over obstacles while sprinting clubs down the course.</p>
       </div>
+
+      <!-- ✅ NEW: Credits Card -->
+      <div class="world-card" id="creditsButton">
+        <div class="world-thumb">📜</div>
+        <h2>Credits</h2>
+        <p>See who made the game</p>
+      </div>
     </div>
+  </div>
+
+  <!-- ✅ NEW: Credits Screen -->
+  <div id="credits-screen" class="menu-screen hidden">
+    <h1 class="game-title">📜 Credits</h1>
+
+    <p>Advisor - Todd Shifflett</p>
+    <p>Andrew Pulliam</p>
+    <p>Tucker Mollus</p>
+    <p>Joseph Parsons</p>
+
+    <br>
+    <button id="backFromCredits">⬅ Back to Menu</button>
   </div>
 
   <!-- Game Area -->
@@ -51,6 +75,25 @@
   </div>
 
   <script src="scripts/app.js?v=20260318b"></script>
+
+  <!-- ✅ NEW: Credits Logic -->
+  <script>
+    const creditsButton = document.getElementById('creditsButton');
+    const creditsScreen = document.getElementById('credits-screen');
+    const backFromCredits = document.getElementById('backFromCredits');
+    const mainMenu = document.getElementById('main-menu');
+
+    creditsButton.addEventListener('click', () => {
+      mainMenu.classList.add('hidden');
+      creditsScreen.classList.remove('hidden');
+    });
+
+    backFromCredits.addEventListener('click', () => {
+      creditsScreen.classList.add('hidden');
+      mainMenu.classList.remove('hidden');
+    });
+  </script>
+
   <script>
     // Responsive canvas
     const canvas = document.getElementById('gameCanvas');
