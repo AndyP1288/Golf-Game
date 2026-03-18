@@ -161,7 +161,7 @@ const topUi = document.createElement('div');
 topUi.className = 'top-ui';
 right.appendChild(topUi);
 
-// Keep HUD outside the canvas so it never covers gameplay
+// HUD (outside the canvas so it never overlaps gameplay elements)
 const hud = document.createElement('div');
 hud.className = 'hud small';
 hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
@@ -176,7 +176,7 @@ const canvasStage = document.createElement('div');
 canvasStage.className = 'canvas-stage';
 right.appendChild(canvasStage);
 
-// Canvas
+// Canvas setup
 const canvas = document.createElement('canvas');
 canvas.id = 'gw-canvas';
 canvas.style.width = '100%';
@@ -197,7 +197,7 @@ const bottomUi = document.createElement('div');
 bottomUi.className = 'bottom-ui';
 right.appendChild(bottomUi);
 
-// Bottom controls
+// bottom bar
 const bottom = document.createElement('div');
 bottom.className = 'bottom-bar small';
 bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
@@ -210,7 +210,7 @@ root.appendChild(panel);
 // Size the canvas to the visible stage
 const ctx = canvas.getContext('2d');
 function resizeCanvas() {
-  // Match the real stage size so canvas art stays sharp
+  // physical size equals drawable stage size for crisp drawing
   const rect = canvasStage.getBoundingClientRect();
   canvas.width = Math.max(800, Math.floor(rect.width));
   canvas.height = Math.max(480, Math.floor(rect.height));
@@ -1689,12 +1689,6 @@ function createManagerWorld() {
   const MAX_QUEUE = 10;
   const REQUEST_PATIENCE_MS = 18000;
   const BASE_SPAWN_MS = 2600;
-  const STARTING_CASH = 900;
-  const STARTING_REPUTATION = 70;
-  const OPENING_REQUEST_COUNT = 4;
-  const WIN_SCORE = 1300;
-  const WIN_REPUTATION = 45;
-  const FAILURE_CASH = -300;
 
   const departments = [
     { id: 'proshop', name: 'Pro Shop', color: '#2563eb', x: 0, y: 0, w: 0, h: 0 },
@@ -1721,8 +1715,8 @@ function createManagerWorld() {
   };
 
   const state = {
-    cash: STARTING_CASH,
-    reputation: STARTING_REPUTATION,
+    cash: 900,
+    reputation: 70,
     score: 0,
     combo: 0,
     bestCombo: 0,
@@ -1742,154 +1736,133 @@ function createManagerWorld() {
     rushUntil: 0
   };
 
-  function nowMs() {
-    return performance.now();
-  }
+  function nowMs() { return performance.now(); }
 
   function resetState() {
-    Object.assign(state, {
-      cash: STARTING_CASH,
-      reputation: STARTING_REPUTATION,
-      score: 0,
-      combo: 0,
-      bestCombo: 0,
-      solved: 0,
-      missed: 0,
-      selectedDeptId: null,
-      requests: [],
-      hoveredRequestId: null,
-      floatingTexts: [],
-      shiftStart: nowMs(),
-      shiftOver: false,
-      win: false,
-      spawnTimer: 900,
-      lastTick: 0,
-      flashMs: 0,
-      difficulty: 1,
-      rushUntil: 0
-    });
+    state.cash = 900;
+    state.reputation = 70;
+    state.score = 0;
+    state.combo = 0;
+    state.bestCombo = 0;
+    state.solved = 0;
+    state.missed = 0;
+    state.selectedDeptId = null;
+    state.requests = [];
+    state.hoveredRequestId = null;
+    state.floatingTexts = [];
+    state.shiftStart = nowMs();
+    state.shiftOver = false;
+    state.win = false;
+    state.spawnTimer = 900;
+    state.lastTick = 0;
+    state.flashMs = 0;
+    state.difficulty = 1;
+    state.rushUntil = 0;
 
-    for (let i = 0; i < OPENING_REQUEST_COUNT; i++) {
-      spawnRequest(true);
-    }
+    for (let i = 0; i < 4; i++) spawnRequest(true);
   }
 
-  function updateLayout() {
-    const laneLeft = Math.round(canvas.width * 0.04);
-    const laneWidth = Math.round(canvas.width * 0.45);
+  function setLayout() {
+    const laneX = Math.round(canvas.width * 0.04);
+    const laneW = Math.round(canvas.width * 0.45);
     const laneTop = Math.round(canvas.height * 0.22);
     const laneGap = Math.round(canvas.height * 0.035);
-    const laneHeight = Math.round((canvas.height * 0.62 - laneGap * 2) / 3);
+    const laneH = Math.round((canvas.height * 0.62 - laneGap * 2) / 3);
 
-    departments.forEach((department, index) => {
-      department.x = laneLeft;
-      department.y = laneTop + index * (laneHeight + laneGap);
-      department.w = laneWidth;
-      department.h = laneHeight;
+    departments.forEach((dept, idx) => {
+      dept.x = laneX;
+      dept.y = laneTop + idx * (laneH + laneGap);
+      dept.w = laneW;
+      dept.h = laneH;
     });
   }
 
-  function pickRandomDepartment() {
+  function chooseRandomDept() {
     return departments[Math.floor(Math.random() * departments.length)];
   }
 
   function spawnRequest(isOpening = false) {
     if (state.requests.length >= MAX_QUEUE || state.shiftOver) return;
 
-    const department = pickRandomDepartment();
-    const templates = requestTemplates[department.id];
+    const dept = chooseRandomDept();
+    const templates = requestTemplates[dept.id];
     const template = templates[Math.floor(Math.random() * templates.length)];
-    const rewardVariance = Math.floor((Math.random() - 0.5) * 12);
+    const variance = Math.floor((Math.random() - 0.5) * 12);
     const difficultyBoost = Math.floor((state.difficulty - 1) * 8);
-    const rushChance = Math.min(0.14 + (state.difficulty - 1) * 0.06, 0.32);
-    const isRush = !isOpening && Math.random() < rushChance;
-    const createdAt = nowMs();
+    const isRush = !isOpening && Math.random() < Math.min(0.14 + (state.difficulty - 1) * 0.06, 0.32);
 
     state.requests.push({
       id: Math.random().toString(36).slice(2),
-      type: department.id,
-      departmentName: department.name,
+      type: dept.id,
+      departmentName: dept.name,
       label: template.label,
-      reward: template.reward + rewardVariance + difficultyBoost,
+      reward: template.reward + variance + difficultyBoost,
       rep: template.rep,
-      createdAt,
-      expiresAt: createdAt + REQUEST_PATIENCE_MS * (isOpening ? 1.15 : 1),
+      createdAt: nowMs(),
+      expiresAt: nowMs() + REQUEST_PATIENCE_MS * (isOpening ? 1.15 : 1),
       rush: isRush
     });
 
-    if (isRush) state.rushUntil = createdAt + 1400;
+    if (isRush) state.rushUntil = nowMs() + 1400;
   }
 
   function addFloatingText(text, x, y, color = '#dcfce7') {
     state.floatingTexts.push({ text, x, y, color, life: 1000 });
   }
 
-  function shiftFailed() {
-    return state.reputation <= 0 || state.cash <= FAILURE_CASH;
-  }
-
-  function endShift(win) {
-    state.shiftOver = true;
-    state.win = win;
-  }
-
-  function handleRequest(request, departmentId) {
+  function resolveRequest(req, deptId) {
     if (state.shiftOver) return;
 
-    const requestIndex = state.requests.findIndex(item => item.id === request.id);
-    if (requestIndex === -1) return;
+    const idx = state.requests.findIndex(r => r.id === req.id);
+    if (idx === -1) return;
 
-    state.requests.splice(requestIndex, 1);
+    state.requests.splice(idx, 1);
 
-    const rushBonus = request.rush ? 20 : 0;
-    if (request.type === departmentId) {
+    const rushBonus = req.rush ? 20 : 0;
+    if (req.type === deptId) {
       const comboBonus = state.combo * 8;
-      const payout = Math.max(35, request.reward + comboBonus + rushBonus);
+      const payout = Math.max(35, req.reward + comboBonus + rushBonus);
 
       state.cash += Math.round(payout * 0.65);
-      state.reputation = clamp(state.reputation + request.rep, 0, 100);
+      state.reputation = clamp(state.reputation + req.rep, 0, 100);
       state.score += payout;
       state.combo += 1;
       state.bestCombo = Math.max(state.bestCombo, state.combo);
       state.solved += 1;
       state.flashMs = 260;
 
-      addFloatingText(`+$${payout}`, request.renderX + 22, request.renderY + 18, '#bbf7d0');
-      if (request.rush) addFloatingText('RUSH ✓', request.renderX + 22, request.renderY + 38, '#fde68a');
+      addFloatingText(`+$${payout}`, req.renderX + 22, req.renderY + 18, '#bbf7d0');
+      if (req.rush) addFloatingText('RUSH ✓', req.renderX + 22, req.renderY + 38, '#fde68a');
     } else {
-      const reputationPenalty = request.rush ? 16 : 10;
-      state.reputation = clamp(state.reputation - reputationPenalty, 0, 100);
+      const penalty = req.rush ? 16 : 10;
+      state.reputation = clamp(state.reputation - penalty, 0, 100);
       state.cash -= 40;
       state.combo = 0;
       state.missed += 1;
-      addFloatingText('Wrong desk!', request.renderX + 18, request.renderY + 20, '#fecaca');
+      addFloatingText('Wrong desk!', req.renderX + 18, req.renderY + 20, '#fecaca');
     }
 
-    if (shiftFailed()) endShift(false);
+    if (state.reputation <= 0 || state.cash <= -300) {
+      state.shiftOver = true;
+      state.win = false;
+    }
   }
 
   function updateDifficulty(elapsedMs) {
-    const progress = clamp(elapsedMs / SHIFT_MS, 0, 1);
-    state.difficulty = 1 + progress * 2.2;
-  }
-
-  function updateFloatingTexts(dt) {
-    state.floatingTexts = state.floatingTexts.filter((text) => {
-      text.life -= dt;
-      text.y -= dt * 0.022;
-      return text.life > 0;
-    });
+    const pct = clamp(elapsedMs / SHIFT_MS, 0, 1);
+    state.difficulty = 1 + pct * 2.2;
   }
 
   function update(now, dt) {
     if (state.shiftOver) {
-      updateFloatingTexts(dt);
+      state.floatingTexts = state.floatingTexts.filter(t => (t.life -= dt) > 0);
       return;
     }
 
     const elapsed = now - state.shiftStart;
     if (elapsed >= SHIFT_MS) {
-      endShift(state.score >= WIN_SCORE && state.reputation >= WIN_REPUTATION);
+      state.shiftOver = true;
+      state.win = state.score >= 1300 && state.reputation >= 45;
       return;
     }
 
@@ -1902,10 +1875,10 @@ function createManagerWorld() {
       state.spawnTimer = spawnInterval * (0.82 + Math.random() * 0.34);
     }
 
-    state.requests = state.requests.filter((request) => {
-      if (now <= request.expiresAt) return true;
-      state.reputation = clamp(state.reputation - (request.rush ? 15 : 9), 0, 100);
-      state.cash -= request.rush ? 55 : 35;
+    state.requests = state.requests.filter(req => {
+      if (now <= req.expiresAt) return true;
+      state.reputation = clamp(state.reputation - (req.rush ? 15 : 9), 0, 100);
+      state.cash -= req.rush ? 55 : 35;
       state.combo = 0;
       state.missed += 1;
       return false;
@@ -1917,9 +1890,17 @@ function createManagerWorld() {
       state.rushUntil = 0;
     }
 
-    if (shiftFailed()) endShift(false);
+    if (state.reputation <= 0 || state.cash <= -300) {
+      state.shiftOver = true;
+      state.win = false;
+    }
 
-    updateFloatingTexts(dt);
+    state.floatingTexts = state.floatingTexts.filter(t => {
+      t.life -= dt;
+      t.y -= dt * 0.022;
+      return t.life > 0;
+    });
+
     state.flashMs = Math.max(0, state.flashMs - dt);
   }
 
@@ -1951,11 +1932,11 @@ function createManagerWorld() {
     const minutes = Math.floor(remaining / 60000);
     const seconds = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
 
-    const panelWidth = Math.min(canvas.width * 0.94, 940);
-    const panelX = (canvas.width - panelWidth) / 2;
+    const panelW = Math.min(canvas.width * 0.94, 940);
+    const panelX = (canvas.width - panelW) / 2;
     const panelY = 20;
     ctx.fillStyle = state.flashMs > 0 ? 'rgba(22, 101, 52, 0.92)' : 'rgba(15, 23, 42, 0.88)';
-    drawRoundedRect(ctx, panelX, panelY, panelWidth, 80, 16);
+    drawRoundedRect(ctx, panelX, panelY, panelW, 80, 16);
 
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 26px Inter';
@@ -1966,99 +1947,99 @@ function createManagerWorld() {
     ctx.fillText(`Cash: $${Math.round(state.cash)}   Reputation: ${Math.round(state.reputation)}   Score: ${Math.round(state.score)}`, panelX + 24, panelY + 57);
     ctx.fillText(`Combo x${state.combo}  ·  Queue ${state.requests.length}/${MAX_QUEUE}  ·  Time ${minutes}:${seconds}`, panelX + 24, panelY + 74);
 
-    const meterX = panelX + panelWidth - 220;
+    const meterX = panelX + panelW - 220;
     const meterY = panelY + 16;
-    const meterWidth = 180;
-    const meterHeight = 10;
+    const meterW = 180;
+    const meterH = 10;
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    drawRoundedRect(ctx, meterX, meterY, meterWidth, meterHeight, 5);
+    drawRoundedRect(ctx, meterX, meterY, meterW, meterH, 5);
     ctx.fillStyle = '#22c55e';
-    drawRoundedRect(ctx, meterX, meterY, meterWidth * clamp(state.reputation / 100, 0, 1), meterHeight, 5);
+    drawRoundedRect(ctx, meterX, meterY, meterW * clamp(state.reputation / 100, 0, 1), meterH, 5);
     ctx.fillStyle = '#e2e8f0';
     ctx.font = '11px Inter';
     ctx.fillText('Member Mood', meterX, meterY - 3);
   }
 
   function drawDepartments() {
-    departments.forEach((department) => {
-      const isSelected = state.selectedDeptId === department.id;
-      ctx.fillStyle = department.color;
-      drawRoundedRect(ctx, department.x, department.y, department.w, department.h, 16);
+    departments.forEach((dept) => {
+      const isSelected = state.selectedDeptId === dept.id;
+      ctx.fillStyle = dept.color;
+      drawRoundedRect(ctx, dept.x, dept.y, dept.w, dept.h, 16);
 
       ctx.fillStyle = 'rgba(15,23,42,.18)';
-      drawRoundedRect(ctx, department.x + 12, department.y + department.h - 20, department.w - 24, 8, 4);
+      drawRoundedRect(ctx, dept.x + 12, dept.y + dept.h - 20, dept.w - 24, 8, 4);
 
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 22px Inter';
-      ctx.fillText(department.name, department.x + 18, department.y + 34);
+      ctx.fillText(dept.name, dept.x + 18, dept.y + 34);
       ctx.font = '13px Inter';
-      ctx.fillText('Select desk, then click matching request card →', department.x + 18, department.y + 56);
+      ctx.fillText('Select desk, then click matching request card →', dept.x + 18, dept.y + 56);
 
       if (isSelected) {
         ctx.strokeStyle = '#fef9c3';
         ctx.lineWidth = 4;
-        ctx.strokeRect(department.x - 2, department.y - 2, department.w + 4, department.h + 4);
+        ctx.strokeRect(dept.x - 2, dept.y - 2, dept.w + 4, dept.h + 4);
       }
     });
   }
 
   function drawRequests(now) {
-    const requestX = canvas.width * 0.57;
-    const cardWidth = canvas.width * 0.37;
-    const cardHeight = Math.max(68, canvas.height * 0.11);
-    const cardGap = 12;
+    const x = canvas.width * 0.57;
+    const cardW = canvas.width * 0.37;
+    const cardH = Math.max(68, canvas.height * 0.11);
+    const gap = 12;
     const startY = canvas.height * 0.22;
 
     if (state.requests.length === 0) {
       ctx.fillStyle = 'rgba(15,23,42,0.7)';
       ctx.font = '16px Inter';
-      ctx.fillText('Queue clear. Great pace — new requests arriving soon.', requestX + 12, startY + 28);
+      ctx.fillText('Queue clear. Great pace — new requests arriving soon.', x + 12, startY + 28);
       return;
     }
 
-    state.requests.forEach((request, index) => {
-      const cardY = startY + index * (cardHeight + cardGap);
-      request.renderX = requestX;
-      request.renderY = cardY;
-      request.renderW = cardWidth;
-      request.renderH = cardHeight;
+    state.requests.forEach((req, idx) => {
+      const y = startY + idx * (cardH + gap);
+      req.renderX = x;
+      req.renderY = y;
+      req.renderW = cardW;
+      req.renderH = cardH;
 
-      const timeLeft = Math.max(0, request.expiresAt - now);
-      const timeLeftRatio = clamp(timeLeft / REQUEST_PATIENCE_MS, 0, 1);
-      const isHovered = state.hoveredRequestId === request.id;
+      const timeLeft = Math.max(0, req.expiresAt - now);
+      const lifePct = clamp(timeLeft / REQUEST_PATIENCE_MS, 0, 1);
+      const hovered = state.hoveredRequestId === req.id;
 
-      ctx.fillStyle = isHovered ? 'rgba(30,41,59,0.95)' : 'rgba(15,23,42,0.88)';
-      drawRoundedRect(ctx, requestX, cardY, cardWidth, cardHeight, 14);
+      ctx.fillStyle = hovered ? 'rgba(30,41,59,0.95)' : 'rgba(15,23,42,0.88)';
+      drawRoundedRect(ctx, x, y, cardW, cardH, 14);
 
       ctx.fillStyle = '#f8fafc';
       ctx.font = 'bold 16px Inter';
-      ctx.fillText(request.label, requestX + 14, cardY + 24);
+      ctx.fillText(req.label, x + 14, y + 24);
 
       ctx.font = '13px Inter';
       ctx.fillStyle = '#cbd5e1';
-      const rushTag = request.rush ? '  ·  RUSH' : '';
-      ctx.fillText(`${request.departmentName}${rushTag}`, requestX + 14, cardY + 44);
+      const rushTag = req.rush ? '  ·  RUSH' : '';
+      ctx.fillText(`${req.departmentName}${rushTag}`, x + 14, y + 44);
 
-      const barX = requestX + 14;
-      const barY = cardY + cardHeight - 16;
-      const barWidth = cardWidth - 28;
+      const barX = x + 14;
+      const barY = y + cardH - 16;
+      const barW = cardW - 28;
       ctx.fillStyle = 'rgba(255,255,255,0.16)';
-      drawRoundedRect(ctx, barX, barY, barWidth, 8, 4);
-      ctx.fillStyle = request.rush ? '#f97316' : '#22c55e';
-      drawRoundedRect(ctx, barX, barY, barWidth * timeLeftRatio, 8, 4);
+      drawRoundedRect(ctx, barX, barY, barW, 8, 4);
+      ctx.fillStyle = req.rush ? '#f97316' : '#22c55e';
+      drawRoundedRect(ctx, barX, barY, barW * lifePct, 8, 4);
 
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '12px Inter';
-      ctx.fillText(`$${request.reward}`, requestX + cardWidth - 56, cardY + 24);
+      ctx.fillText(`$${req.reward}`, x + cardW - 56, y + 24);
     });
   }
 
   function drawFloatingTexts() {
-    state.floatingTexts.forEach((text) => {
-      ctx.globalAlpha = clamp(text.life / 1000, 0, 1);
-      ctx.fillStyle = text.color;
+    state.floatingTexts.forEach((ft) => {
+      ctx.globalAlpha = clamp(ft.life / 1000, 0, 1);
+      ctx.fillStyle = ft.color;
       ctx.font = 'bold 15px Inter';
-      ctx.fillText(text.text, text.x, text.y);
+      ctx.fillText(ft.text, ft.x, ft.y);
       ctx.globalAlpha = 1;
     });
   }
@@ -2069,26 +2050,26 @@ function createManagerWorld() {
     ctx.fillStyle = 'rgba(0,0,0,0.58)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const boxWidth = Math.min(620, canvas.width * 0.82);
-    const boxHeight = 290;
-    const boxX = (canvas.width - boxWidth) / 2;
-    const boxY = (canvas.height - boxHeight) / 2;
+    const boxW = Math.min(620, canvas.width * 0.82);
+    const boxH = 290;
+    const x = (canvas.width - boxW) / 2;
+    const y = (canvas.height - boxH) / 2;
 
     ctx.fillStyle = state.win ? 'rgba(22,101,52,0.93)' : 'rgba(127,29,29,0.92)';
-    drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 22);
+    drawRoundedRect(ctx, x, y, boxW, boxH, 22);
 
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 34px Inter';
-    ctx.fillText(state.win ? 'Shift Crushed!' : 'Shift Collapsed', boxX + 28, boxY + 58);
+    ctx.fillText(state.win ? 'Shift Crushed!' : 'Shift Collapsed', x + 28, y + 58);
 
     ctx.font = '16px Inter';
-    ctx.fillText(`Final score: ${Math.round(state.score)}`, boxX + 28, boxY + 100);
-    ctx.fillText(`Best combo: x${state.bestCombo}`, boxX + 28, boxY + 128);
-    ctx.fillText(`Solved: ${state.solved}   Missed: ${state.missed}`, boxX + 28, boxY + 156);
-    ctx.fillText(`Reputation: ${Math.round(state.reputation)}   Cash: $${Math.round(state.cash)}`, boxX + 28, boxY + 184);
+    ctx.fillText(`Final score: ${Math.round(state.score)}`, x + 28, y + 100);
+    ctx.fillText(`Best combo: x${state.bestCombo}`, x + 28, y + 128);
+    ctx.fillText(`Solved: ${state.solved}   Missed: ${state.missed}`, x + 28, y + 156);
+    ctx.fillText(`Reputation: ${Math.round(state.reputation)}   Cash: $${Math.round(state.cash)}`, x + 28, y + 184);
 
     ctx.fillStyle = '#dbeafe';
-    ctx.fillText('Press R to restart shift or Back to Menu for another world.', boxX + 28, boxY + 226);
+    ctx.fillText('Press R to restart shift or Back to Menu for another world.', x + 28, y + 226);
   }
 
   function draw(now) {
@@ -2101,32 +2082,26 @@ function createManagerWorld() {
   }
 
   function getRequestAt(x, y) {
-    return state.requests.find((request) => x >= request.renderX && x <= request.renderX + request.renderW && y >= request.renderY && y <= request.renderY + request.renderH);
+    return state.requests.find(req => x >= req.renderX && x <= req.renderX + req.renderW && y >= req.renderY && y <= req.renderY + req.renderH);
   }
 
-  function onMouseMove(mouseState) {
-    const hoveredRequest = getRequestAt(mouseState.x, mouseState.y);
-    state.hoveredRequestId = hoveredRequest ? hoveredRequest.id : null;
+  function onMouseMove(m) {
+    const req = getRequestAt(m.x, m.y);
+    state.hoveredRequestId = req ? req.id : null;
   }
 
-  function onMouseDown(mouseState) {
+  function onMouseDown(m) {
     if (state.shiftOver) return;
 
-    const clickedDepartment = departments.find((department) => (
-      mouseState.x >= department.x &&
-      mouseState.x <= department.x + department.w &&
-      mouseState.y >= department.y &&
-      mouseState.y <= department.y + department.h
-    ));
-
-    if (clickedDepartment) {
-      state.selectedDeptId = clickedDepartment.id;
+    const dept = departments.find(d => m.x >= d.x && m.x <= d.x + d.w && m.y >= d.y && m.y <= d.y + d.h);
+    if (dept) {
+      state.selectedDeptId = dept.id;
       return;
     }
 
-    const clickedRequest = getRequestAt(mouseState.x, mouseState.y);
-    if (clickedRequest && state.selectedDeptId) {
-      handleRequest(clickedRequest, state.selectedDeptId);
+    const req = getRequestAt(m.x, m.y);
+    if (req && state.selectedDeptId) {
+      resolveRequest(req, state.selectedDeptId);
     }
   }
 
@@ -2137,16 +2112,16 @@ function createManagerWorld() {
   }
 
   function onResize() {
-    updateLayout();
+    setLayout();
   }
 
   function onStart() {
-    updateLayout();
+    setLayout();
     setInstructions('Club Manager Controls', [
       'Click a department lane on the left to select it.',
       'Click a matching request card on the right before its timer runs out.',
       'Keep combos alive for huge payouts; wrong routing breaks combo and hurts reputation.',
-      `Survive the full shift and finish with at least ${WIN_SCORE} score + ${WIN_REPUTATION} reputation.`
+      'Survive the full shift and finish with at least 1300 score + 45 reputation.'
     ]);
     hudWorld.textContent = 'Club Manager';
     hudSub.textContent = 'Route requests fast, protect reputation, and hit score goals.';
@@ -2178,8 +2153,6 @@ function createManagerWorld() {
     loop
   };
 }
-
-
   /* ===========================
      World dispatching & startup
      =========================== */
