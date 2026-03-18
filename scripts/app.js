@@ -67,13 +67,16 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     .world-thumb .fallback{position:relative;z-index:1}
     .world-info{flex:1}
     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
-    .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
-    .hud{position:absolute;left:16px;top:16px;max-width:360px;background:#ffffffd9;padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px);z-index:3}
-    .instructions{position:absolute;right:16px;top:16px;max-width:380px;max-height:42%;overflow:auto;background:#ffffffde;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,.08);z-index:3}
+    .canvas-wrap{flex:1;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;min-width:0;min-height:0}
+    .top-ui{display:flex;gap:12px;align-items:stretch;justify-content:space-between;min-width:0}
+    .canvas-stage{position:relative;min-height:0;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+    .hud{flex:1;min-width:220px;max-width:420px;background:#ffffffde;padding:12px 14px;border-radius:14px;backdrop-filter:blur(4px);border:1px solid rgba(0,0,0,.08);box-shadow:0 10px 20px rgba(15,23,42,.08)}
+    .instructions{flex:1;min-width:260px;max-width:460px;max-height:170px;overflow:auto;background:#ffffffde;padding:12px 14px;border-radius:14px;border:1px solid rgba(0,0,0,.08);box-shadow:0 10px 20px rgba(15,23,42,.08)}
     .instructions h4{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
     .instructions ul{margin:0;padding-left:18px}
     .instructions li{margin:2px 0;font-size:12px;color:#123}
-    .bottom-bar{position:absolute;left:16px;bottom:16px;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
+    .bottom-ui{display:flex;justify-content:flex-start;align-items:center;gap:12px;min-width:0}
+    .bottom-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
     .small{font-size:12px;color:#222}
     .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
     .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
@@ -89,6 +92,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     .admin-action{width:100%;text-align:left;background:#0f766e;color:#fff;border:none;border-radius:8px;padding:8px;cursor:pointer;font-size:12px;margin-top:6px}
     .admin-action.secondary{background:#475569}
     .admin-note{font-size:11px;color:#444;margin-top:8px}
+    @media (max-width: 1100px){.panel{flex-direction:column;max-height:95vh}.menu-col{width:auto}.top-ui{flex-direction:column}.hud,.instructions{max-width:none}.instructions{max-height:140px}}
   `;
   document.head.appendChild(style);
 
@@ -153,39 +157,51 @@ worlds.forEach(w => {
 const right = document.createElement('div');
 right.className = 'canvas-wrap';
 
+const topUi = document.createElement('div');
+topUi.className = 'top-ui';
+right.appendChild(topUi);
+
+// HUD (outside the canvas so it never overlaps gameplay elements)
+const hud = document.createElement('div');
+hud.className = 'hud small';
+hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
+topUi.appendChild(hud);
+
+const instructionsBox = document.createElement('div');
+instructionsBox.className = 'instructions small';
+instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
+topUi.appendChild(instructionsBox);
+
+const canvasStage = document.createElement('div');
+canvasStage.className = 'canvas-stage';
+right.appendChild(canvasStage);
+
 // Canvas setup
 const canvas = document.createElement('canvas');
 canvas.id = 'gw-canvas';
 canvas.style.width = '100%';
 canvas.style.height = '100%';
 canvas.tabIndex = 0; // to capture keys
-right.appendChild(canvas);
-
-// HUD (top-left)
-const hud = document.createElement('div');
-hud.className = 'hud small';
-hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
-right.appendChild(hud);
-
-const instructionsBox = document.createElement('div');
-instructionsBox.className = 'instructions small';
-instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
-right.appendChild(instructionsBox);
+canvasStage.appendChild(canvas);
 
 const adminConsole = document.createElement('div');
 adminConsole.className = 'admin-console hidden';
-right.appendChild(adminConsole);
+canvasStage.appendChild(adminConsole);
 
 function setInstructions(title, items) {
   const list = items.map(item => `<li>${item}</li>`).join('');
   instructionsBox.innerHTML = `<h4>${title}</h4><ul>${list}</ul>`;
 }
 
+const bottomUi = document.createElement('div');
+bottomUi.className = 'bottom-ui';
+right.appendChild(bottomUi);
+
 // bottom bar
 const bottom = document.createElement('div');
 bottom.className = 'bottom-bar small';
 bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
-right.appendChild(bottom);
+bottomUi.appendChild(bottom);
 
 panel.appendChild(left);
 panel.appendChild(right);
@@ -194,8 +210,8 @@ root.appendChild(panel);
 // Responsive canvas sizing logic
 const ctx = canvas.getContext('2d');
 function resizeCanvas() {
-  // physical size equals container size for crisp drawing
-  const rect = right.getBoundingClientRect();
+  // physical size equals drawable stage size for crisp drawing
+  const rect = canvasStage.getBoundingClientRect();
   canvas.width = Math.max(800, Math.floor(rect.width));
   canvas.height = Math.max(480, Math.floor(rect.height));
 }
