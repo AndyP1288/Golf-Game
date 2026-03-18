@@ -6,7 +6,7 @@ body {
   padding: 0;
   overflow-x: hidden;
   color: #1e2a38;
-  line-height: 1.5; /* Improves readability */
+  line-height: 1.5;
 }
 
 h1, h2, p {
@@ -36,9 +36,10 @@ button:hover {
   align-items: center;
   justify-content: flex-start;
   text-align: center;
-  min-height: 100vh; /* changed from height:100vh */
+  min-height: 100vh;
   padding-top: 60px;
-  overflow-y: auto; /* allows vertical scroll */
+  padding-bottom: 40px; /* ✅ ADDED */
+  overflow-y: auto;
   scroll-behavior: smooth;
 }
 
@@ -59,20 +60,21 @@ button:hover {
   margin-bottom: 30px;
 }
 
+/* ==== Worlds Grid ==== */
 .worlds-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 20px;
   width: 90%;
   max-width: 1200px;
-  padding-bottom: 20px;
+  padding-bottom: 80px; /* ✅ INCREASED so Credits isn't cut off */
 }
 
 /* ==== Scrollable for small screens ==== */
 @media (max-width: 600px) {
   .worlds-grid {
     display: flex;
-    overflow-x: auto; /* horizontal scroll for cards */
+    overflow-x: auto;
     padding: 10px 0;
   }
 
