@@ -43,26 +43,13 @@
         <p>Run and jump over obstacles while sprinting clubs down the course.</p>
       </div>
 
-      <!-- ✅ NEW: Credits Card -->
-      <div class="world-card" id="creditsButton">
-        <div class="world-thumb">📜</div>
+      <!-- ✅ NEW CREDITS CARD -->
+      <div class="world-card" data-game="credits">
+        <div class="world-thumb" aria-hidden="true">📜</div>
         <h2>Credits</h2>
-        <p>See who made the game</p>
+        <p>See who built the game</p>
       </div>
     </div>
-  </div>
-
-  <!-- ✅ NEW: Credits Screen -->
-  <div id="credits-screen" class="menu-screen hidden">
-    <h1 class="game-title">📜 Credits</h1>
-
-    <p>Advisor - Todd Shifflett</p>
-    <p>Andrew Pulliam</p>
-    <p>Tucker Mollus</p>
-    <p>Joseph Parsons</p>
-
-    <br>
-    <button id="backFromCredits">⬅ Back to Menu</button>
   </div>
 
   <!-- Game Area -->
@@ -75,25 +62,6 @@
   </div>
 
   <script src="scripts/app.js?v=20260318b"></script>
-
-  <!-- ✅ NEW: Credits Logic -->
-  <script>
-    const creditsButton = document.getElementById('creditsButton');
-    const creditsScreen = document.getElementById('credits-screen');
-    const backFromCredits = document.getElementById('backFromCredits');
-    const mainMenu = document.getElementById('main-menu');
-
-    creditsButton.addEventListener('click', () => {
-      mainMenu.classList.add('hidden');
-      creditsScreen.classList.remove('hidden');
-    });
-
-    backFromCredits.addEventListener('click', () => {
-      creditsScreen.classList.add('hidden');
-      mainMenu.classList.remove('hidden');
-    });
-  </script>
-
   <script>
     // Responsive canvas
     const canvas = document.getElementById('gameCanvas');
