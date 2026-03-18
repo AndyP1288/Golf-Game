@@ -411,10 +411,6 @@ function stopCurrentWorld(options = {}) {
      =========================== */
 function createProGolferWorld() {
   // Configuration
-  const groundH = Math.floor(canvas.height * 0.20);
-  const teeX = Math.floor(canvas.width * 0.12);
-  const holeX = Math.floor(canvas.width * 0.82);
-  const holeY = canvas.height - groundH - 6;
   const ballRadius = 8;
   const gravity = 0.45; // pixels/frame^2
   const friction = 0.995;
@@ -431,9 +427,19 @@ function createProGolferWorld() {
   let showWinOverlay = false;
   let overlayText = '';
 
+  function getCourseMetrics() {
+    const groundH = Math.floor(canvas.height * 0.20);
+    const teeX = Math.floor(canvas.width * 0.12);
+    const holeX = Math.floor(canvas.width * 0.82);
+    const groundY = canvas.height - groundH - ballRadius;
+    const holeY = canvas.height - groundH - 6;
+    return { groundH, teeX, holeX, groundY, holeY };
+  }
+
   // Reset ball to tee
   function resetBall() {
-    ball = { x: teeX, y: canvas.height - groundH - ballRadius, vx: 0, vy: 0, onGround: true };
+    const { teeX, groundY } = getCourseMetrics();
+    ball = { x: teeX, y: groundY, vx: 0, vy: 0, onGround: true };
     strokes = 0;
     charging = false;
     power = 0;
@@ -453,7 +459,7 @@ function createProGolferWorld() {
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      const groundY = canvas.height - groundH - ballRadius;
+      const { groundY } = getCourseMetrics();
       if (ball.y >= groundY) {
         ball.y = groundY;
         ball.onGround = true;
@@ -475,6 +481,7 @@ function createProGolferWorld() {
 
   // Check for hole-in
   function checkHoleIn() {
+    const { holeX, holeY } = getCourseMetrics();
     const dx = ball.x - holeX;
     const dy = ball.y - holeY;
     const dist = Math.sqrt(dx*dx + dy*dy);
@@ -494,6 +501,7 @@ function createProGolferWorld() {
 
   // Draw function
   function drawScene() {
+    const { groundH, teeX, holeX, holeY } = getCourseMetrics();
     // sky
     const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
     skyGrad.addColorStop(0, '#bfefff');
@@ -649,7 +657,18 @@ function createProGolferWorld() {
     }
   }
 
-  function onResize() {}
+  function onResize() {
+    if (!ball) return;
+    const { groundY } = getCourseMetrics();
+    if (ball.onGround) {
+      ball.y = groundY;
+    } else if (ball.y > canvas.height + 200) {
+      ball.y = groundY;
+      ball.vx = 0;
+      ball.vy = 0;
+      ball.onGround = true;
+    }
+  }
   function onStart() {
     hudWorld.textContent = 'Pro Golfer';
     hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
@@ -666,6 +685,7 @@ function createProGolferWorld() {
 
   function forceWin() {
     if (!ball) return;
+    const { holeX, holeY } = getCourseMetrics();
     strokes = Math.max(strokes, 1);
     ball.x = holeX;
     ball.y = holeY;
