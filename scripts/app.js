@@ -448,8 +448,6 @@ function createProGolferWorld() {
     statusPill.textContent = `Par ${par} — Strokes ${strokes}/${par}`;
   }
 
-  resetBall();
-
   // Physics update
   function physicsStep() {
     if (!ball.onGround) {
@@ -476,6 +474,10 @@ function createProGolferWorld() {
         overlayText = 'Ball out of bounds — Reset to tee';
         showWinOverlay = true;
       }
+    } else if (ball) {
+      // Keep any grounded ball perfectly aligned to the current ground level.
+      const { groundY } = getCourseMetrics();
+      ball.y = groundY;
     }
   }
 
@@ -670,6 +672,8 @@ function createProGolferWorld() {
     }
   }
   function onStart() {
+    // startWorld() resizes the canvas right before onStart, so spawn after that resize.
+    resetBall();
     hudWorld.textContent = 'Pro Golfer';
     hudSub.textContent = 'Hold Space or click+hold near ball to charge power. Use Up/Down to adjust aim.';
     setInstructions('Pro Golfer Controls', [
@@ -678,7 +682,6 @@ function createProGolferWorld() {
       'Mouse drag: aim direction',
       'Click + hold near ball: charge shot with mouse'
     ]);
-    statusPill.textContent = `Par ${par} • Strokes ${strokes}/${par}`;
     windStrength = (Math.random() * 1.6 - 0.8);
   }
   function onStop() {}
