@@ -2159,11 +2159,12 @@ function createManagerWorld() {
 
   // world instances cached
   const worldConstructors = {
-    'pro': createProGolferWorld,
-    'designer': createDesignerWorld,
-    'greens': createGreenskeeperWorld,
-    'caddy': createCaddyWorld,
-    'manager': createManagerWorld
+  'pro': createProGolferWorld,
+  'designer': createDesignerWorld,
+  'greens': createGreenskeeperWorld,
+  'caddy': createCaddyWorld,
+  'manager': createManagerWorld,
+  'credits': createCreditsWorld
   };
 
   function startWorld(id) {
@@ -2206,7 +2207,57 @@ function createManagerWorld() {
   canvas.addEventListener('focus', () => { /* nothing */ });
 
   // Initialize: show menu
-  showMenu();
+ function createCreditsWorld() {
+  function onStart() {
+    hudWorld.textContent = 'Credits';
+    hudSub.textContent = 'The team behind Golf Worlds';
+    setInstructions('Credits', [
+      'Advisor - Todd Shifflett',
+      'Andrew Pulliam',
+      'Tucker Mollus',
+      'Joseph Parsons'
+    ]);
+    statusPill.textContent = 'Credits Page';
+  }
+
+  function loop() {
+    if (!currentWorld || currentWorld.id !== 'credits') return;
+
+    ctx.fillStyle = '#0b3d2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+
+    ctx.font = 'bold 36px Inter';
+    ctx.fillText('Credits', canvas.width / 2, 120);
+
+    ctx.font = '20px Inter';
+    ctx.fillText('Advisor - Todd Shifflett', canvas.width / 2, 200);
+    ctx.fillText('Andrew Pulliam', canvas.width / 2, 240);
+    ctx.fillText('Tucker Mollus', canvas.width / 2, 280);
+    ctx.fillText('Joseph Parsons', canvas.width / 2, 320);
+
+    ctx.font = '16px Inter';
+    ctx.fillText('Press Back to return', canvas.width / 2, 400);
+
+    animationFrameId = requestAnimationFrame(loop);
+  }
+
+  return {
+    id: 'credits',
+    onStart,
+    onStop() {},
+    onKeyDown() {},
+    onKeyUp() {},
+    onMouseMove() {},
+    onMouseDown() {},
+    onMouseUp() {},
+    onResize() {},
+    loop
+  };
+}
+   showMenu();
 
   // Expose a quick debugging API to window for testing
   window.GolfWorlds = {
