@@ -1854,7 +1854,6 @@ function createManagerWorld() {
     loop
   };
 }
-
   /* ===========================
      World dispatching & startup
      =========================== */
