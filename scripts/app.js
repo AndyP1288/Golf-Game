@@ -60,6 +60,10 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     .menu-col{width:340px;display:flex;flex-direction:column;gap:12px}
     .title{font-size:20px;font-weight:700;color:var(--accent);margin-bottom:4px}
     .subtitle{font-size:13px;color:var(--muted);margin-bottom:8px}
+    .credits-box{background:#ffffffd9;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:10px 12px}
+    .credits-box h3{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
+    .credits-box ul{margin:0;padding-left:18px}
+    .credits-box li{font-size:12px;color:#123;margin:2px 0}
     .world-tile{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;cursor:pointer;border:1px solid rgba(0,0,0,.04);transition:transform .12s ease, box-shadow .12s ease}
     .world-tile:hover{transform:translateY(-4px);box-shadow:0 8px 18px rgba(0,0,0,.08)}
     .world-thumb{position:relative;width:64px;height:48px;border-radius:6px;flex-shrink:0;background:linear-gradient(90deg,#fff,#eee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#333;overflow:hidden}
@@ -119,6 +123,19 @@ subtitle.textContent = 'Jump into immersive mini-worlds that demonstrate 5 diffe
 
 left.appendChild(title);
 left.appendChild(subtitle);
+
+const creditsBox = document.createElement('div');
+creditsBox.className = 'credits-box';
+creditsBox.innerHTML = `
+  <h3>Credits</h3>
+  <ul>
+    <li>Advisor-Todd Shifflett</li>
+    <li>Andrew Pulliam</li>
+    <li>Tucker Mollus</li>
+    <li>Joseph Parsons</li>
+  </ul>
+`;
+left.appendChild(creditsBox);
 
 const adminButton = document.createElement('button');
 adminButton.className = 'admin-btn';
