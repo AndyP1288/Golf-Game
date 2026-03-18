@@ -41,7 +41,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
 (() => {
   'use strict';
 
-  // Create root element if not already present
+  // Build the app root if the page does not already have one
   const existingRoot = document.getElementById('app-root');
   const root = existingRoot || (function () {
     const r = document.createElement('div');
@@ -50,7 +50,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     return r;
   })();
 
-  // Basic stylesheet injection for overlay UI
+  // Shared UI styles
   const style = document.createElement('style');
   style.textContent = `
     :root{--bg:#e7f4f2;--panel:#ffffffcc;--accent:#00695c;--muted:#6b6b6b}
@@ -67,13 +67,16 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     .world-thumb .fallback{position:relative;z-index:1}
     .world-info{flex:1}
     .play-btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
-    .canvas-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
-    .hud{position:absolute;left:16px;top:16px;max-width:360px;background:#ffffffd9;padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px);z-index:3}
-    .instructions{position:absolute;right:16px;top:16px;max-width:380px;max-height:42%;overflow:auto;background:#ffffffde;padding:10px 12px;border-radius:10px;border:1px solid rgba(0,0,0,.08);z-index:3}
+    .canvas-wrap{flex:1;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;min-width:0;min-height:0}
+    .top-ui{display:flex;gap:12px;align-items:stretch;justify-content:space-between;min-width:0}
+    .canvas-stage{position:relative;min-height:0;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+    .hud{flex:1;min-width:220px;max-width:420px;background:#ffffffde;padding:12px 14px;border-radius:14px;backdrop-filter:blur(4px);border:1px solid rgba(0,0,0,.08);box-shadow:0 10px 20px rgba(15,23,42,.08)}
+    .instructions{flex:1;min-width:260px;max-width:460px;max-height:170px;overflow:auto;background:#ffffffde;padding:12px 14px;border-radius:14px;border:1px solid rgba(0,0,0,.08);box-shadow:0 10px 20px rgba(15,23,42,.08)}
     .instructions h4{margin:0 0 6px 0;font-size:13px;color:#0a4d44}
     .instructions ul{margin:0;padding-left:18px}
     .instructions li{margin:2px 0;font-size:12px;color:#123}
-    .bottom-bar{position:absolute;left:16px;bottom:16px;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
+    .bottom-ui{display:flex;justify-content:flex-start;align-items:center;gap:12px;min-width:0}
+    .bottom-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#00000011;padding:8px 12px;border-radius:999px;z-index:3}
     .small{font-size:12px;color:#222}
     .btn-secondary{background:transparent;border:1px solid rgba(0,0,0,.08);padding:8px 12px;border-radius:8px;cursor:pointer}
     .center-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
@@ -89,6 +92,7 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
     .admin-action{width:100%;text-align:left;background:#0f766e;color:#fff;border:none;border-radius:8px;padding:8px;cursor:pointer;font-size:12px;margin-top:6px}
     .admin-action.secondary{background:#475569}
     .admin-note{font-size:11px;color:#444;margin-top:8px}
+    @media (max-width: 1100px){.panel{flex-direction:column;max-height:95vh}.menu-col{width:auto}.top-ui{flex-direction:column}.hud,.instructions{max-width:none}.instructions{max-height:140px}}
   `;
   document.head.appendChild(style);
 
@@ -96,11 +100,11 @@ function drawRoundedRect(ctx, x, y, w, h, r) {
    Global Canvas & Systems
    ========================= */
 
-// Create canvas area inside panel
+// Main app panel
 const panel = document.createElement('div');
 panel.className = 'panel';
 
-// Left column: menu / world list
+// Left column: world list
 const left = document.createElement('div');
 left.className = 'menu-col'; // <-- scrollable now
 left.style.overflowY = 'auto'; // Added scroll
@@ -130,7 +134,7 @@ const worlds = [
   { id: 'manager', name: 'Club Manager', summary: 'Run a chaotic clubhouse shift: triage requests, chain combos, and keep members thrilled.', color: '#e6d1ff', image: 'Assets/images/clubmanager.png' }
 ];
 
-// Tile factory
+// Build menu tiles
 const tiles = {};
 worlds.forEach(w => {
   const tile = document.createElement('div');
@@ -149,53 +153,65 @@ worlds.forEach(w => {
   tiles[w.id] = tile;
 });
 
-// Right column: canvas + HUD
+// Right column: shared UI + canvas
 const right = document.createElement('div');
 right.className = 'canvas-wrap';
 
-// Canvas setup
+const topUi = document.createElement('div');
+topUi.className = 'top-ui';
+right.appendChild(topUi);
+
+// Keep HUD outside the canvas so it never covers gameplay
+const hud = document.createElement('div');
+hud.className = 'hud small';
+hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
+topUi.appendChild(hud);
+
+const instructionsBox = document.createElement('div');
+instructionsBox.className = 'instructions small';
+instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
+topUi.appendChild(instructionsBox);
+
+const canvasStage = document.createElement('div');
+canvasStage.className = 'canvas-stage';
+right.appendChild(canvasStage);
+
+// Canvas
 const canvas = document.createElement('canvas');
 canvas.id = 'gw-canvas';
 canvas.style.width = '100%';
 canvas.style.height = '100%';
 canvas.tabIndex = 0; // to capture keys
-right.appendChild(canvas);
-
-// HUD (top-left)
-const hud = document.createElement('div');
-hud.className = 'hud small';
-hud.innerHTML = `<div id="hud-world">Select a world</div><div id="hud-sub" class="muted">Click a tile to begin</div>`;
-right.appendChild(hud);
-
-const instructionsBox = document.createElement('div');
-instructionsBox.className = 'instructions small';
-instructionsBox.innerHTML = '<h4>Instructions</h4><ul><li>Select a world to see controls.</li></ul>';
-right.appendChild(instructionsBox);
+canvasStage.appendChild(canvas);
 
 const adminConsole = document.createElement('div');
 adminConsole.className = 'admin-console hidden';
-right.appendChild(adminConsole);
+canvasStage.appendChild(adminConsole);
 
 function setInstructions(title, items) {
   const list = items.map(item => `<li>${item}</li>`).join('');
   instructionsBox.innerHTML = `<h4>${title}</h4><ul>${list}</ul>`;
 }
 
-// bottom bar
+const bottomUi = document.createElement('div');
+bottomUi.className = 'bottom-ui';
+right.appendChild(bottomUi);
+
+// Bottom controls
 const bottom = document.createElement('div');
 bottom.className = 'bottom-bar small';
 bottom.innerHTML = `<button id="btn-back" class="btn-secondary">Back to Menu</button> <span id="status-pill" class="pill">Idle</span>`;
-right.appendChild(bottom);
+bottomUi.appendChild(bottom);
 
 panel.appendChild(left);
 panel.appendChild(right);
 root.appendChild(panel);
 
-// Responsive canvas sizing logic
+// Size the canvas to the visible stage
 const ctx = canvas.getContext('2d');
 function resizeCanvas() {
-  // physical size equals container size for crisp drawing
-  const rect = right.getBoundingClientRect();
+  // Match the real stage size so canvas art stays sharp
+  const rect = canvasStage.getBoundingClientRect();
   canvas.width = Math.max(800, Math.floor(rect.width));
   canvas.height = Math.max(480, Math.floor(rect.height));
 }
@@ -206,7 +222,7 @@ window.addEventListener('resize', () => {
 
 resizeCanvas();
 
-// Global game state
+// Shared runtime state
 let currentWorld = null;
 let animationFrameId = null;
 let mouse = { x: 0, y: 0, down: false };
@@ -299,6 +315,8 @@ function renderAdminConsole() {
       currentWorld.runAdminAction(btn.dataset.adminAction);
       renderAdminConsole();
     });
+
+    if (isRush) state.rushUntil = nowMs() + 1400;
   });
 }
 
@@ -1664,179 +1682,485 @@ function createCaddyWorld() {
 
 
  /* ===========================
-   World: Club Manager (Fixed)
+   World: Club Manager
    =========================== */
 function createManagerWorld() {
   const SHIFT_MS = 90000;
-  const patience = 18000;
+  const MAX_QUEUE = 10;
+  const REQUEST_PATIENCE_MS = 18000;
+  const BASE_SPAWN_MS = 2600;
+  const STARTING_CASH = 900;
+  const STARTING_REPUTATION = 70;
+  const OPENING_REQUEST_COUNT = 4;
+  const WIN_SCORE = 1300;
+  const WIN_REPUTATION = 45;
+  const FAILURE_CASH = -300;
 
-  const resources = {
-    cash: 900,
-    reputation: 70,
-    combo: 0,
+  const departments = [
+    { id: 'proshop', name: 'Pro Shop', color: '#2563eb', x: 0, y: 0, w: 0, h: 0 },
+    { id: 'starter', name: 'Starter Desk', color: '#0ea5a4', x: 0, y: 0, w: 0, h: 0 },
+    { id: 'lounge', name: 'Club Lounge', color: '#f59e0b', x: 0, y: 0, w: 0, h: 0 }
+  ];
+
+  const requestTemplates = {
+    proshop: [
+      { label: 'Regrip set', reward: 62, rep: 2 },
+      { label: 'Rental fitting', reward: 76, rep: 3 },
+      { label: 'Ball sleeve restock', reward: 52, rep: 1 }
+    ],
+    starter: [
+      { label: 'Move tee time', reward: 70, rep: 2 },
+      { label: 'Storm delay support', reward: 82, rep: 3 },
+      { label: 'Pairing dispute', reward: 58, rep: 2 }
+    ],
+    lounge: [
+      { label: 'Post-round rush', reward: 68, rep: 2 },
+      { label: 'Catering refill', reward: 74, rep: 2 },
+      { label: 'VIP table request', reward: 90, rep: 3 }
+    ]
+  };
+
+  const state = {
+    cash: STARTING_CASH,
+    reputation: STARTING_REPUTATION,
     score: 0,
+    combo: 0,
+    bestCombo: 0,
+    solved: 0,
+    missed: 0,
+    selectedDeptId: null,
+    requests: [],
+    hoveredRequestId: null,
+    floatingTexts: [],
+    shiftStart: 0,
+    shiftOver: false,
+    win: false,
+    spawnTimer: BASE_SPAWN_MS,
+    lastTick: 0,
+    flashMs: 0,
+    difficulty: 1,
     rushUntil: 0
   };
 
-  const departments = [
-    { id: 'proshop', name: 'Pro Shop', color: '#3b82f6', x: 40, y: 132, w: 340, h: 90, cooldownUntil: 0 },
-    { id: 'starter', name: 'Starter Desk', color: '#10b981', x: 40, y: 244, w: 340, h: 90, cooldownUntil: 0 },
-    { id: 'lounge', name: 'Club Lounge', color: '#f59e0b', x: 40, y: 356, w: 340, h: 90, cooldownUntil: 0 }
-  ];
-
-  const requestTemplates = [
-    { type: 'proshop', label: 'Grip replacement', reward: 50 },
-    { type: 'starter', label: 'Tee time backup', reward: 60 },
-    { type: 'lounge', label: 'Lunch rush queue', reward: 55 },
-    { type: 'starter', label: 'Weather delay', reward: 65 }
-  ];
-
-  let activeRequests = [];
-  let selectedDeptId = null;
-
-  let shiftStart = 0;
-  let lastTick = 0;
-  let spawnTimer = 1000;
-
-  function nowMs() { return performance.now(); }
-
-  function resetState() {
-    activeRequests = [];
-    selectedDeptId = null;
-    shiftStart = nowMs();
-    lastTick = 0;
-    spawnTimer = 1000;
-
-    for (let i = 0; i < 3; i++) spawnRequest();
+  function nowMs() {
+    return performance.now();
   }
 
-  function spawnRequest() {
-    if (activeRequests.length >= 6) return;
+  function resetState() {
+    Object.assign(state, {
+      cash: STARTING_CASH,
+      reputation: STARTING_REPUTATION,
+      score: 0,
+      combo: 0,
+      bestCombo: 0,
+      solved: 0,
+      missed: 0,
+      selectedDeptId: null,
+      requests: [],
+      hoveredRequestId: null,
+      floatingTexts: [],
+      shiftStart: nowMs(),
+      shiftOver: false,
+      win: false,
+      spawnTimer: 900,
+      lastTick: 0,
+      flashMs: 0,
+      difficulty: 1,
+      rushUntil: 0
+    });
 
-    const t = requestTemplates[Math.floor(Math.random() * requestTemplates.length)];
+    for (let i = 0; i < OPENING_REQUEST_COUNT; i++) {
+      spawnRequest(true);
+    }
+  }
 
-    activeRequests.push({
-      id: Math.random().toString(36),
-      type: t.type,
-      label: t.label,
-      reward: t.reward,
-      expiresAt: nowMs() + patience
+  function updateLayout() {
+    const laneLeft = Math.round(canvas.width * 0.04);
+    const laneWidth = Math.round(canvas.width * 0.45);
+    const laneTop = Math.round(canvas.height * 0.22);
+    const laneGap = Math.round(canvas.height * 0.035);
+    const laneHeight = Math.round((canvas.height * 0.62 - laneGap * 2) / 3);
+
+    departments.forEach((department, index) => {
+      department.x = laneLeft;
+      department.y = laneTop + index * (laneHeight + laneGap);
+      department.w = laneWidth;
+      department.h = laneHeight;
     });
   }
 
-  function routeRequest(id) {
-    if (!selectedDeptId) return;
+  function pickRandomDepartment() {
+    return departments[Math.floor(Math.random() * departments.length)];
+  }
 
-    const idx = activeRequests.findIndex(r => r.id === id);
-    if (idx === -1) return;
+  function spawnRequest(isOpening = false) {
+    if (state.requests.length >= MAX_QUEUE || state.shiftOver) return;
 
-    const req = activeRequests[idx];
+    const department = pickRandomDepartment();
+    const templates = requestTemplates[department.id];
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    const rewardVariance = Math.floor((Math.random() - 0.5) * 12);
+    const difficultyBoost = Math.floor((state.difficulty - 1) * 8);
+    const rushChance = Math.min(0.14 + (state.difficulty - 1) * 0.06, 0.32);
+    const isRush = !isOpening && Math.random() < rushChance;
+    const createdAt = nowMs();
 
-    if (req.type !== selectedDeptId) {
-      resources.combo = 0;
-      return;
+    state.requests.push({
+      id: Math.random().toString(36).slice(2),
+      type: department.id,
+      departmentName: department.name,
+      label: template.label,
+      reward: template.reward + rewardVariance + difficultyBoost,
+      rep: template.rep,
+      createdAt,
+      expiresAt: createdAt + REQUEST_PATIENCE_MS * (isOpening ? 1.15 : 1),
+      rush: isRush
+    });
+
+    if (isRush) state.rushUntil = createdAt + 1400;
+  }
+
+  function addFloatingText(text, x, y, color = '#dcfce7') {
+    state.floatingTexts.push({ text, x, y, color, life: 1000 });
+  }
+
+  function shiftFailed() {
+    return state.reputation <= 0 || state.cash <= FAILURE_CASH;
+  }
+
+  function endShift(win) {
+    state.shiftOver = true;
+    state.win = win;
+  }
+
+  function handleRequest(request, departmentId) {
+    if (state.shiftOver) return;
+
+    const requestIndex = state.requests.findIndex(item => item.id === request.id);
+    if (requestIndex === -1) return;
+
+    state.requests.splice(requestIndex, 1);
+
+    const rushBonus = request.rush ? 20 : 0;
+    if (request.type === departmentId) {
+      const comboBonus = state.combo * 8;
+      const payout = Math.max(35, request.reward + comboBonus + rushBonus);
+
+      state.cash += Math.round(payout * 0.65);
+      state.reputation = clamp(state.reputation + request.rep, 0, 100);
+      state.score += payout;
+      state.combo += 1;
+      state.bestCombo = Math.max(state.bestCombo, state.combo);
+      state.solved += 1;
+      state.flashMs = 260;
+
+      addFloatingText(`+$${payout}`, request.renderX + 22, request.renderY + 18, '#bbf7d0');
+      if (request.rush) addFloatingText('RUSH ✓', request.renderX + 22, request.renderY + 38, '#fde68a');
+    } else {
+      const reputationPenalty = request.rush ? 16 : 10;
+      state.reputation = clamp(state.reputation - reputationPenalty, 0, 100);
+      state.cash -= 40;
+      state.combo = 0;
+      state.missed += 1;
+      addFloatingText('Wrong desk!', request.renderX + 18, request.renderY + 20, '#fecaca');
     }
 
-    activeRequests.splice(idx, 1);
+    if (shiftFailed()) endShift(false);
+  }
 
-    resources.score += req.reward + resources.combo * 5;
-    resources.combo++;
+  function updateDifficulty(elapsedMs) {
+    const progress = clamp(elapsedMs / SHIFT_MS, 0, 1);
+    state.difficulty = 1 + progress * 2.2;
+  }
+
+  function updateFloatingTexts(dt) {
+    state.floatingTexts = state.floatingTexts.filter((text) => {
+      text.life -= dt;
+      text.y -= dt * 0.022;
+      return text.life > 0;
+    });
   }
 
   function update(now, dt) {
-    spawnTimer -= dt;
+    if (state.shiftOver) {
+      updateFloatingTexts(dt);
+      return;
+    }
 
-    if (spawnTimer <= 0) {
+    const elapsed = now - state.shiftStart;
+    if (elapsed >= SHIFT_MS) {
+      endShift(state.score >= WIN_SCORE && state.reputation >= WIN_REPUTATION);
+      return;
+    }
+
+    updateDifficulty(elapsed);
+
+    const spawnInterval = BASE_SPAWN_MS / state.difficulty;
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
       spawnRequest();
-      spawnTimer = 1200;
+      state.spawnTimer = spawnInterval * (0.82 + Math.random() * 0.34);
     }
 
-    activeRequests = activeRequests.filter(req => now < req.expiresAt);
-  }
-
-  function draw() {
-    // --- Top panel ---
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(20, 20, 360, 100);
-
-    ctx.fillStyle = "white";
-    ctx.font = "18px Arial";
-    ctx.fillText("Club Manager", 40, 50);
-    ctx.fillText("Score: " + resources.score, 40, 75);
-    ctx.fillText("Combo: " + resources.combo, 200, 75);
-
-    // --- Departments ---
-    departments.forEach(dept => {
-      ctx.fillStyle = dept.color;
-      ctx.fillRect(dept.x, dept.y, dept.w, dept.h);
-
-      ctx.fillStyle = "white";
-      ctx.font = "16px Arial";
-      ctx.fillText(dept.name, dept.x + 10, dept.y + 25);
-
-      // highlight selected
-      if (selectedDeptId === dept.id) {
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(dept.x, dept.y, dept.w, dept.h);
-      }
+    state.requests = state.requests.filter((request) => {
+      if (now <= request.expiresAt) return true;
+      state.reputation = clamp(state.reputation - (request.rush ? 15 : 9), 0, 100);
+      state.cash -= request.rush ? 55 : 35;
+      state.combo = 0;
+      state.missed += 1;
+      return false;
     });
 
-    // --- Requests ---
-    activeRequests.forEach((req, i) => {
-      const x = 420;
-      const y = 120 + i * 70;
-
-      // box
-      ctx.fillStyle = "#2a2a2a";
-      ctx.fillRect(x, y, 260, 60);
-
-      // text
-      ctx.fillStyle = "white";
-      ctx.font = "14px Arial";
-      ctx.fillText(req.label, x + 10, y + 25);
-
-      // timer bar
-      const timeLeft = req.expiresAt - nowMs();
-      const pct = Math.max(0, timeLeft / patience);
-
-      ctx.fillStyle = "red";
-      ctx.fillRect(x + 10, y + 40, 240 * pct, 8);
-    });
-  }
-
-  function onMouseDown(m) {
-    // select department
-    departments.forEach(dept => {
-      if (
-        m.x >= dept.x &&
-        m.x <= dept.x + dept.w &&
-        m.y >= dept.y &&
-        m.y <= dept.y + dept.h
-      ) {
-        selectedDeptId = dept.id;
-      }
-    });
-
-    // process first request
-    if (selectedDeptId && activeRequests.length > 0) {
-      routeRequest(activeRequests[0].id);
+    if (state.requests.length >= MAX_QUEUE - 2) {
+      state.rushUntil = now + 1300;
+    } else if (now > state.rushUntil && state.requests.length <= 2) {
+      state.rushUntil = 0;
     }
+
+    if (shiftFailed()) endShift(false);
+
+    updateFloatingTexts(dt);
+    state.flashMs = Math.max(0, state.flashMs - dt);
+  }
+
+  function drawBackground(now) {
+    const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    bg.addColorStop(0, '#f0f9ff');
+    bg.addColorStop(1, '#dbeafe');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.08)';
+    drawRoundedRect(ctx, canvas.width * 0.03, canvas.height * 0.18, canvas.width * 0.47, canvas.height * 0.68, 20);
+
+    const queueX = canvas.width * 0.54;
+    const queueW = canvas.width * 0.42;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.08)';
+    drawRoundedRect(ctx, queueX, canvas.height * 0.18, queueW, canvas.height * 0.68, 20);
+
+    if (now < state.rushUntil) {
+      const pulse = 0.18 + Math.abs(Math.sin(now * 0.018)) * 0.16;
+      ctx.fillStyle = `rgba(249, 115, 22, ${pulse.toFixed(3)})`;
+      drawRoundedRect(ctx, queueX, canvas.height * 0.18, queueW, canvas.height * 0.68, 20);
+    }
+  }
+
+  function drawTopHud(now) {
+    const elapsed = clamp(now - state.shiftStart, 0, SHIFT_MS);
+    const remaining = Math.max(0, SHIFT_MS - elapsed);
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
+
+    const panelWidth = Math.min(canvas.width * 0.94, 940);
+    const panelX = (canvas.width - panelWidth) / 2;
+    const panelY = 20;
+    ctx.fillStyle = state.flashMs > 0 ? 'rgba(22, 101, 52, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+    drawRoundedRect(ctx, panelX, panelY, panelWidth, 80, 16);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 26px Inter';
+    ctx.fillText('Club Manager Shift', panelX + 24, panelY + 34);
+
+    ctx.font = '14px Inter';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(`Cash: $${Math.round(state.cash)}   Reputation: ${Math.round(state.reputation)}   Score: ${Math.round(state.score)}`, panelX + 24, panelY + 57);
+    ctx.fillText(`Combo x${state.combo}  ·  Queue ${state.requests.length}/${MAX_QUEUE}  ·  Time ${minutes}:${seconds}`, panelX + 24, panelY + 74);
+
+    const meterX = panelX + panelWidth - 220;
+    const meterY = panelY + 16;
+    const meterWidth = 180;
+    const meterHeight = 10;
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    drawRoundedRect(ctx, meterX, meterY, meterWidth, meterHeight, 5);
+    ctx.fillStyle = '#22c55e';
+    drawRoundedRect(ctx, meterX, meterY, meterWidth * clamp(state.reputation / 100, 0, 1), meterHeight, 5);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '11px Inter';
+    ctx.fillText('Member Mood', meterX, meterY - 3);
+  }
+
+  function drawDepartments() {
+    departments.forEach((department) => {
+      const isSelected = state.selectedDeptId === department.id;
+      ctx.fillStyle = department.color;
+      drawRoundedRect(ctx, department.x, department.y, department.w, department.h, 16);
+
+      ctx.fillStyle = 'rgba(15,23,42,.18)';
+      drawRoundedRect(ctx, department.x + 12, department.y + department.h - 20, department.w - 24, 8, 4);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 22px Inter';
+      ctx.fillText(department.name, department.x + 18, department.y + 34);
+      ctx.font = '13px Inter';
+      ctx.fillText('Select desk, then click matching request card →', department.x + 18, department.y + 56);
+
+      if (isSelected) {
+        ctx.strokeStyle = '#fef9c3';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(department.x - 2, department.y - 2, department.w + 4, department.h + 4);
+      }
+    });
+  }
+
+  function drawRequests(now) {
+    const requestX = canvas.width * 0.57;
+    const cardWidth = canvas.width * 0.37;
+    const cardHeight = Math.max(68, canvas.height * 0.11);
+    const cardGap = 12;
+    const startY = canvas.height * 0.22;
+
+    if (state.requests.length === 0) {
+      ctx.fillStyle = 'rgba(15,23,42,0.7)';
+      ctx.font = '16px Inter';
+      ctx.fillText('Queue clear. Great pace — new requests arriving soon.', requestX + 12, startY + 28);
+      return;
+    }
+
+    state.requests.forEach((request, index) => {
+      const cardY = startY + index * (cardHeight + cardGap);
+      request.renderX = requestX;
+      request.renderY = cardY;
+      request.renderW = cardWidth;
+      request.renderH = cardHeight;
+
+      const timeLeft = Math.max(0, request.expiresAt - now);
+      const timeLeftRatio = clamp(timeLeft / REQUEST_PATIENCE_MS, 0, 1);
+      const isHovered = state.hoveredRequestId === request.id;
+
+      ctx.fillStyle = isHovered ? 'rgba(30,41,59,0.95)' : 'rgba(15,23,42,0.88)';
+      drawRoundedRect(ctx, requestX, cardY, cardWidth, cardHeight, 14);
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 16px Inter';
+      ctx.fillText(request.label, requestX + 14, cardY + 24);
+
+      ctx.font = '13px Inter';
+      ctx.fillStyle = '#cbd5e1';
+      const rushTag = request.rush ? '  ·  RUSH' : '';
+      ctx.fillText(`${request.departmentName}${rushTag}`, requestX + 14, cardY + 44);
+
+      const barX = requestX + 14;
+      const barY = cardY + cardHeight - 16;
+      const barWidth = cardWidth - 28;
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      drawRoundedRect(ctx, barX, barY, barWidth, 8, 4);
+      ctx.fillStyle = request.rush ? '#f97316' : '#22c55e';
+      drawRoundedRect(ctx, barX, barY, barWidth * timeLeftRatio, 8, 4);
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '12px Inter';
+      ctx.fillText(`$${request.reward}`, requestX + cardWidth - 56, cardY + 24);
+    });
+  }
+
+  function drawFloatingTexts() {
+    state.floatingTexts.forEach((text) => {
+      ctx.globalAlpha = clamp(text.life / 1000, 0, 1);
+      ctx.fillStyle = text.color;
+      ctx.font = 'bold 15px Inter';
+      ctx.fillText(text.text, text.x, text.y);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  function drawEndOverlay() {
+    if (!state.shiftOver) return;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const boxWidth = Math.min(620, canvas.width * 0.82);
+    const boxHeight = 290;
+    const boxX = (canvas.width - boxWidth) / 2;
+    const boxY = (canvas.height - boxHeight) / 2;
+
+    ctx.fillStyle = state.win ? 'rgba(22,101,52,0.93)' : 'rgba(127,29,29,0.92)';
+    drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 22);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 34px Inter';
+    ctx.fillText(state.win ? 'Shift Crushed!' : 'Shift Collapsed', boxX + 28, boxY + 58);
+
+    ctx.font = '16px Inter';
+    ctx.fillText(`Final score: ${Math.round(state.score)}`, boxX + 28, boxY + 100);
+    ctx.fillText(`Best combo: x${state.bestCombo}`, boxX + 28, boxY + 128);
+    ctx.fillText(`Solved: ${state.solved}   Missed: ${state.missed}`, boxX + 28, boxY + 156);
+    ctx.fillText(`Reputation: ${Math.round(state.reputation)}   Cash: $${Math.round(state.cash)}`, boxX + 28, boxY + 184);
+
+    ctx.fillStyle = '#dbeafe';
+    ctx.fillText('Press R to restart shift or Back to Menu for another world.', boxX + 28, boxY + 226);
+  }
+
+  function draw(now) {
+    drawBackground(now);
+    drawTopHud(now);
+    drawDepartments();
+    drawRequests(now);
+    drawFloatingTexts();
+    drawEndOverlay();
+  }
+
+  function getRequestAt(x, y) {
+    return state.requests.find((request) => x >= request.renderX && x <= request.renderX + request.renderW && y >= request.renderY && y <= request.renderY + request.renderH);
+  }
+
+  function onMouseMove(mouseState) {
+    const hoveredRequest = getRequestAt(mouseState.x, mouseState.y);
+    state.hoveredRequestId = hoveredRequest ? hoveredRequest.id : null;
+  }
+
+  function onMouseDown(mouseState) {
+    if (state.shiftOver) return;
+
+    const clickedDepartment = departments.find((department) => (
+      mouseState.x >= department.x &&
+      mouseState.x <= department.x + department.w &&
+      mouseState.y >= department.y &&
+      mouseState.y <= department.y + department.h
+    ));
+
+    if (clickedDepartment) {
+      state.selectedDeptId = clickedDepartment.id;
+      return;
+    }
+
+    const clickedRequest = getRequestAt(mouseState.x, mouseState.y);
+    if (clickedRequest && state.selectedDeptId) {
+      handleRequest(clickedRequest, state.selectedDeptId);
+    }
+  }
+
+  function onKeyDown(code) {
+    if (code === 'KeyR' && state.shiftOver) {
+      resetState();
+    }
+  }
+
+  function onResize() {
+    updateLayout();
   }
 
   function onStart() {
+    updateLayout();
+    setInstructions('Club Manager Controls', [
+      'Click a department lane on the left to select it.',
+      'Click a matching request card on the right before its timer runs out.',
+      'Keep combos alive for huge payouts; wrong routing breaks combo and hurts reputation.',
+      `Survive the full shift and finish with at least ${WIN_SCORE} score + ${WIN_REPUTATION} reputation.`
+    ]);
     hudWorld.textContent = 'Club Manager';
+    hudSub.textContent = 'Route requests fast, protect reputation, and hit score goals.';
     resetState();
   }
 
   function loop(now = nowMs()) {
     if (!currentWorld || currentWorld.id !== 'manager') return;
 
-    const dt = lastTick ? Math.min(now - lastTick, 40) : 16.67;
-    lastTick = now;
+    const dt = state.lastTick ? Math.min(now - state.lastTick, 50) : 16.67;
+    state.lastTick = now;
 
     update(now, dt);
-    draw();
+    draw(now);
 
     animationFrameId = requestAnimationFrame(loop);
   }
@@ -1844,16 +2168,17 @@ function createManagerWorld() {
   return {
     id: 'manager',
     onStart,
-    onMouseDown,
-    onMouseMove() {},
-    onMouseUp() {},
-    onKeyDown() {},
-    onKeyUp() {},
-    onResize() {},
     onStop() {},
+    onResize,
+    onMouseMove,
+    onMouseDown,
+    onMouseUp() {},
+    onKeyDown,
+    onKeyUp() {},
     loop
   };
 }
+
 
   /* ===========================
      World dispatching & startup
